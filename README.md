@@ -2,6 +2,7 @@
 
 [![.NET](https://img.shields.io/badge/.NET-8.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/8.0)
 [![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4)](https://www.microsoft.com/windows)
+[![Release](https://img.shields.io/github/v/release/kay5124/hdmi-switch)](https://github.com/kay5124/hdmi-switch/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 Windows WPF 小工具：即時監看螢幕與本機 HDMI 輸出，並用 DDC/CI **一鍵把螢幕輸入切到 HDMI**。
@@ -9,6 +10,12 @@ Windows WPF 小工具：即時監看螢幕與本機 HDMI 輸出，並用 DDC/CI 
 適合桌機接 DisplayPort、偶爾要切去 HDMI（另一台電腦、筆電、遊戲機、擷取盒）的人。雙擊執行，不常駐服務、不改系統設定。
 
 [English](#english)
+
+## 下載
+
+到 [Releases](https://github.com/kay5124/hdmi-switch/releases/latest) 下載 `HdmiSwitch-v*-win-x64.zip`，解壓後雙擊 `HdmiSwitch.exe`。
+
+這是 self-contained 套件，**不必先裝 .NET**。僅 Windows 10 / 11 x64。
 
 ---
 
@@ -42,14 +49,17 @@ Windows WPF 小工具：即時監看螢幕與本機 HDMI 輸出，並用 DDC/CI 
 
 ## 需求
 
-- Windows 10 或 11
-- [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)（自己建置則需要 SDK）
+- Windows 10 或 11（x64）
+- 從 Releases 下載：不用另外裝 .NET
+- 從原始碼建置：需要 [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - 螢幕 OSD 開啟 **DDC/CI**（多數出廠已開）
 - 用 HDMI／DP／DVI 連接；部分 USB 轉接或虛擬螢幕沒有 DDC
 
 不需要系統管理員權限。
 
 ## 使用方式
+
+一般使用者請走上面的[下載](#下載)。自己建置：
 
 ```powershell
 dotnet build -c Release
@@ -105,6 +115,22 @@ dotnet run
 
 歡迎 issue 與 PR：其他輸入源、多 HDMI 編號設定、系統匣常駐都可以討論。
 
+## 發版方式
+
+別人常見的做法是：**一個正式版 = 一個 git tag = 一個 GitHub Release**，Release 上面掛可執行檔，讓不會編譯的人直接下載。
+
+這個專案已接好 tag 觸發：
+
+1. 把 `HdmiSwitch.csproj` 的 `<Version>` 改成新版號（例如 `1.1.0`）
+2. commit 後推 `main`
+3. 打 tag 並推上去（例如 `v1.1.0`）
+4. GitHub Actions 會建置 win-x64 zip，並建立 / 更新該 tag 的 Release
+
+```powershell
+git tag v1.1.0
+git push origin refs/tags/v1.1.0:refs/tags/v1.1.0
+```
+
 ## 授權
 
 [MIT](LICENSE)。歡迎使用、修改、再發布。
@@ -123,6 +149,10 @@ It is meant for desktops that stay on DisplayPort and occasionally need the moni
 - **No (on most monitors):** whether an *unused* HDMI port on the monitor has signal from another device. DDC only talks on the currently active input.
 
 The green “has signal” badge means this PC sees a display on that output. It does not mean another machine is sending HDMI.
+
+### Download
+
+Get the zip from [Releases](https://github.com/kay5124/hdmi-switch/releases/latest) and run `HdmiSwitch.exe`. Self-contained; no separate .NET install. Windows 10/11 x64 only.
 
 ### Build
 

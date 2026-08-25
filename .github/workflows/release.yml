@@ -1,0 +1,48 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish win-x64
+        run: >
+          dotnet publish HdmiSwitch.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:EnableCompressionInSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          -o publish/win-x64
+
+      - name: Zip
+        run: |
+          Copy-Item LICENSE publish/win-x64/LICENSE -ErrorAction SilentlyContinue
+          Compress-Archive -Path publish/win-x64/* -DestinationPath "HdmiSwitch-${{ github.ref_name }}-win-x64.zip" -Force
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if (gh release view $tag 2>$null) {
+            gh release upload $tag "HdmiSwitch-$tag-win-x64.zip" --clobber
+          } else {
+            gh release create $tag "HdmiSwitch-$tag-win-x64.zip" --title $tag --generate-notes
+          }
