@@ -1,0 +1,31 @@
+<Window x:Class="HdmiSwitch.IdentifyWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        ResizeMode="NoResize"
+        IsHitTestVisible="False">
+    <Border Background="#E60B1016">
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock x:Name="NumberText"
+                       FontSize="160"
+                       FontWeight="Bold"
+                       Foreground="#3EE0C5"
+                       HorizontalAlignment="Center"/>
+            <TextBlock x:Name="PlaceText"
+                       FontSize="42"
+                       FontWeight="SemiBold"
+                       Foreground="#E8EEF5"
+                       HorizontalAlignment="Center"
+                       Margin="0,8,0,0"/>
+            <TextBlock x:Name="TitleText"
+                       FontSize="22"
+                       Foreground="#8A97A8"
+                       HorizontalAlignment="Center"
+                       Margin="0,12,0,0"/>
+        </StackPanel>
+    </Border>
+</Window>

@@ -1,0 +1,73 @@
+﻿<Application x:Class="HdmiSwitch.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="clr-namespace:HdmiSwitch.Converters">
+    <Application.Resources>
+        <Color x:Key="BgColor">#0B1016</Color>
+        <Color x:Key="PanelColor">#151C26</Color>
+        <Color x:Key="CardColor">#1C2633</Color>
+        <Color x:Key="LineColor">#2A3646</Color>
+        <Color x:Key="TextColor">#E8EEF5</Color>
+        <Color x:Key="MutedColor">#8A97A8</Color>
+        <Color x:Key="AccentColor">#3EE0C5</Color>
+        <SolidColorBrush x:Key="BgBrush" Color="{StaticResource BgColor}"/>
+        <SolidColorBrush x:Key="PanelBrush" Color="{StaticResource PanelColor}"/>
+        <SolidColorBrush x:Key="CardBrush" Color="{StaticResource CardColor}"/>
+        <SolidColorBrush x:Key="LineBrush" Color="{StaticResource LineColor}"/>
+        <SolidColorBrush x:Key="TextBrush" Color="{StaticResource TextColor}"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="{StaticResource MutedColor}"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+        <SolidColorBrush x:Key="SignalOnBrush" Color="#4ADE80"/>
+        <SolidColorBrush x:Key="SignalOffBrush" Color="#FB7185"/>
+        <SolidColorBrush x:Key="SignalUnknownBrush" Color="#64748B"/>
+        <converters:SignalKindToBrushConverter x:Key="SignalBrush"/>
+        <converters:BoolToVisibilityConverter x:Key="TrueToVisible"/>
+        <converters:BoolToVisibilityConverter x:Key="FalseToVisible" Invert="True"/>
+
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontFamily" Value="Segoe UI, Microsoft JhengHei UI"/>
+        </Style>
+
+        <Style x:Key="GhostButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Background" Value="#223044"/>
+            <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,7"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2C3D55"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+            <Setter Property="Background" Value="#123F3A"/>
+            <Setter Property="BorderBrush" Value="#2A9B8A"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="Padding" Value="18,12"/>
+        </Style>
+    </Application.Resources>
+</Application>
