@@ -5,7 +5,9 @@
 [![Release](https://img.shields.io/github/v/release/kay5124/hdmi-switch)](https://github.com/kay5124/hdmi-switch/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Windows 桌面程式。以 [DDC/CI](https://en.wikipedia.org/wiki/Display_Data_Channel) 切換螢幕輸入來源，並依實際桌面配置識別每台螢幕的位置。
+Windows 桌面程式。以 [DDC/CI](https://en.wikipedia.org/wiki/Display_Data_Channel) 切換螢幕輸入來源（HDMI／DisplayPort／VGA／DVI），並依實際桌面配置識別每台螢幕的位置。
+
+![主畫面](docs/screenshot.png)
 
 [English](#english)
 
@@ -14,9 +16,11 @@ Windows 桌面程式。以 [DDC/CI](https://en.wikipedia.org/wiki/Display_Data_C
 - 依 Windows 桌面座標排列螢幕，標示左／中／右（或上／下）
 - 標示這個視窗與滑鼠目前所在的螢幕
 - 在實體螢幕上顯示編號（與系統「識別顯示器」相同用途）
-- 讀取目前輸入來源；一鍵或單台切到 HDMI（先 HDMI-1，再 HDMI-2）
+- 讀取目前輸入來源；點名稱切單台，或一次把多台切到同一類輸入
+- 以本機實際接線標示哪個輸入可能有畫面，降低切到沒訊號而黑屏的機會
 - 偵測本機 HDMI 輸出孔是否接上螢幕（HPD / EDID）
 - 可將尚未使用、但已接上螢幕的 HDMI 輸出納入 Windows 桌面
+- 單實例執行；啟動時先讀取顯示狀態再進入主畫面
 
 不常駐背景服務，也不會修改系統顯示設定（延伸桌面除外，需使用者自行按下）。
 
@@ -37,9 +41,9 @@ Windows 桌面程式。以 [DDC/CI](https://en.wikipedia.org/wiki/Display_Data_C
 
 ## 使用
 
-1. 確認目標 HDMI 孔已有訊號來源。
-2. 以畫面上的編號與左／中／右對應實體螢幕；不確定時按「識別」或「識別所有螢幕」。
-3. 按「切到 HDMI」或「全部切到 HDMI」。
+1. 以畫面上的編號與左／中／右對應實體螢幕；不確定時按「識別」或「識別全部」。
+2. 綠色輸入是這台電腦有在輸出的來源；紅色表示本機沒接到，點下去會先警告。
+3. 要切單台就點該螢幕上的輸入名稱；要一次切多台就用下方「全部切到」。
 
 切換後若畫面全黑，請用螢幕 OSD 切回原先輸入。當這台電腦不再是作用中的輸入時，DDC/CI 會暫時無法控制該螢幕。
 
@@ -91,7 +95,9 @@ dotnet build -c Release
 
 ## English
 
-Windows desktop app that switches monitor input to HDMI over DDC/CI and maps each display to its real desktop position (left / center / right).
+Windows desktop app that switches monitor input (HDMI / DisplayPort / VGA / DVI) over DDC/CI and maps each display to its real desktop position (left / center / right).
+
+![Main window](docs/screenshot.png)
 
 ### Install
 
@@ -108,7 +114,7 @@ Download `HdmiSwitch-*-win-x64.zip` from [Releases](https://github.com/kay5124/h
 
 “Has signal” means this PC sees a sink on that output. It does not mean another machine is sending HDMI.
 
-Switching tries HDMI-1 (`0x11`) then HDMI-2 (`0x12`). If the destination has no source, the screen may go black; restore the previous input from the monitor OSD.
+Click an input name to switch one monitor, or use the family buttons to switch all. Inputs this PC is not driving are marked and confirmed before switching. If the destination has no source, the screen may go black; restore the previous input from the monitor OSD.
 
 ### Build
 

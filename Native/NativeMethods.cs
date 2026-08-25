@@ -22,6 +22,7 @@ internal static class NativeMethods
     public const int MonitorDpiEffective = 0;
     public const uint SwpNoActivate = 0x0010;
     public const uint SwpShowWindow = 0x0040;
+    public const int SwRestore = 9;
 
     public delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref Rect lprcMonitor, IntPtr dwData);
 
@@ -42,6 +43,12 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
     public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);

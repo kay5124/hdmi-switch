@@ -2,6 +2,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Threading;
 using HdmiSwitch.Native;
 using HdmiSwitch.Services;
@@ -14,9 +15,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly DispatcherTimer _hereTimer;
     private readonly List<IdentifyWindow> _identifyWindows = [];
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private HwndSource? _hwndSource;
     private int _hereBusy;
     private bool _isSwitching;
     private bool _closed;
+    private bool _ready;
 
     public MainWindow()
     {
@@ -27,6 +30,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _hereTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
         _hereTimer.Tick += (_, _) => _ = RefreshHereFlagsAsync();
         Loaded += OnLoaded;
+        Closing += OnClosing;
         Closed += OnClosed;
     }
 
@@ -36,25 +40,65 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public ObservableCollection<string> Logs { get; } = [];
 
+    public ObservableCollection<InputOption> BatchInputOptions { get; } = [];
+
     public string SummaryText { get; private set; } = "讀取顯示輸出中…";
 
     public string RefreshText { get; private set; } = string.Empty;
 
-    public string CurrentScreenText { get; private set; } = "這個視窗在：偵測中…";
+    public string CurrentScreenText { get; private set; } = "偵測中…";
 
-    public bool CanSwitchAll =>
-        !_isSwitching && (DesktopScreens.Any(o => o.CanSwitchToHdmi) || OtherOutputs.Any(o => o.CanSwitchToHdmi));
+    public bool CanBatchSwitch =>
+        !_isSwitching && DesktopScreens.Any(o => o.CanSwitch);
+
+    public bool IsReady
+    {
+        get => _ready;
+        private set
+        {
+            if (_ready == value)
+            {
+                return;
+            }
+
+            _ready = value;
+            Raise(nameof(IsReady));
+        }
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private IntPtr AppHwnd => new WindowInteropHelper(this).Handle;
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        _ = RefreshOutputsAsync();
-        _refreshTimer.Start();
-        _hereTimer.Start();
-        Log("開始監控。青框是這個視窗所在的螢幕；「識別」會在真實螢幕顯示左／中／右編號。");
+        try
+        {
+            await RefreshOutputsAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            if (!_closed)
+            {
+                IsReady = true;
+                _refreshTimer.Start();
+                _hereTimer.Start();
+                Log("開始監控。點輸入名稱可切到 HDMI／DP／VGA／DVI；琥珀框是這個視窗所在的螢幕。");
+            }
+        }
+    }
+
+    private void OnClosing(object? sender, CancelEventArgs e)
+    {
+        _closed = true;
+        _refreshTimer.Stop();
+        _hereTimer.Stop();
+        CloseIdentifyWindows();
+        if (_hwndSource is not null)
+        {
+            _hwndSource.RemoveHook(WndProc);
+            _hwndSource = null;
+        }
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -68,10 +112,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        if (PresentationSource.FromVisual(this) is HwndSource source)
-        {
-            source.AddHook(WndProc);
-        }
+        _hwndSource = PresentationSource.FromVisual(this) as HwndSource;
+        _hwndSource?.AddHook(WndProc);
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -86,14 +128,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private async Task RefreshOutputsAsync()
     {
-        if (_isSwitching || _closed || !await _refreshLock.WaitAsync(0).ConfigureAwait(true))
+        if (_isSwitching || _closed)
         {
             return;
         }
 
-        var hwnd = AppHwnd;
+        if (!await _refreshLock.WaitAsync(0).ConfigureAwait(true))
+        {
+            return;
+        }
+
         try
         {
+            if (_closed)
+            {
+                return;
+            }
+
+            var hwnd = AppHwnd;
             var snapshot = await Task.Run(() => MonitorHub.Capture(hwnd)).ConfigureAwait(true);
             if (_closed)
             {
@@ -111,9 +163,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
         finally
         {
-            if (!_closed)
+            try
             {
                 _refreshLock.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+                // 視窗已關
             }
         }
     }
@@ -132,7 +188,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             : $"本機 HDMI：{snapshot.HdmiPortCount} 孔，{snapshot.HdmiWithSinkCount} 孔有螢幕";
         RefreshText = $"更新於 {snapshot.CapturedAt:HH:mm:ss}";
         UpdateCurrentScreenText();
-        Raise(nameof(SummaryText), nameof(RefreshText), nameof(CanSwitchAll));
+        RebuildBatchOptions();
+        Raise(nameof(SummaryText), nameof(RefreshText), nameof(CanBatchSwitch));
     }
 
     private static void Merge(ObservableCollection<OutputItem> target, IReadOnlyList<OutputItem> next)
@@ -194,9 +251,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void UpdateCurrentScreenText()
     {
         var here = DesktopScreens.FirstOrDefault(s => s.IsAppHere);
-        var text = here is null
-            ? "這個視窗在：無法對應"
-            : $"這個視窗在：{here.PlaceTitle}";
+        var text = here is null ? "—" : here.PlaceTitle;
         if (CurrentScreenText == text)
         {
             return;
@@ -206,14 +261,117 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         Raise(nameof(CurrentScreenText));
     }
 
-    private async void SwitchAll_OnClick(object sender, RoutedEventArgs e) =>
-        await SwitchAsync(null);
-
-    private async void SwitchOne_OnClick(object sender, RoutedEventArgs e)
+    private void RebuildBatchOptions()
     {
-        if (sender is FrameworkElement { DataContext: OutputItem item })
+        var families = DesktopScreens
+            .SelectMany(s => s.Inputs)
+            .Select(chip => chip.Code is byte code ? InputSelect.FamilyOf(code) : null)
+            .Where(family => family is not null)
+            .Select(family => family!.Value)
+            .ToHashSet();
+        var next = InputSelect.BatchOrder
+            .Where(families.Contains)
+            .Select(family => new InputOption(InputSelect.FamilyName(family), family))
+            .ToArray();
+        if (BatchInputOptions.Count == next.Length &&
+            BatchInputOptions.Zip(next, (current, item) => current == item).All(same => same))
         {
-            await SwitchAsync(string.IsNullOrWhiteSpace(item.SourceGdiName) ? null : item.SourceGdiName);
+            return;
+        }
+
+        BatchInputOptions.Clear();
+        foreach (var option in next)
+        {
+            BatchInputOptions.Add(option);
+        }
+    }
+
+    private async void SwitchInputChip_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element ||
+            element.DataContext is not InputChip { Code: byte code } chip)
+        {
+            return;
+        }
+
+        var item = FindDataContext<OutputItem>(element);
+        if (item is null || !item.CanSwitch)
+        {
+            Log("這台螢幕目前無法用 DDC/CI 切換輸入。");
+            return;
+        }
+
+        if (chip.IsCurrent)
+        {
+            Log($"{item.PlaceTitle} 已經是 {chip.Label}。");
+            return;
+        }
+
+        if (chip.Signal == SignalKind.Off &&
+            MessageBox.Show(
+                this,
+                $"{item.PlaceTitle} 的 {chip.Label}，這台電腦沒有接到這個輸入。\n切過去畫面可能會暗掉，而且要用螢幕本身的按鈕才能切回來。\n\n仍要切換？",
+                "可能沒有訊號",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        await SwitchAsync(item.SourceGdiName, InputRequest.Exact(code));
+    }
+
+    private async void SwitchAllFamily_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: InputOption option })
+        {
+            return;
+        }
+
+        var ready = DesktopScreens.Where(s => s.CanSwitch && s.HasLikelySignal(option.Family)).ToArray();
+        foreach (var skipped in DesktopScreens.Where(s => s.CanSwitch && !s.HasLikelySignal(option.Family)))
+        {
+            Log($"{skipped.PlaceTitle} 略過：這台電腦沒有接到 {option.Label}。");
+        }
+
+        if (ready.Length == 0)
+        {
+            Log($"沒有螢幕適合切到 {option.Label}（本機看起來沒接這類線）。");
+            return;
+        }
+
+        _isSwitching = true;
+        Raise(nameof(CanBatchSwitch));
+        Log($"開始把 {ready.Length} 台螢幕切到 {option.Label}…");
+        try
+        {
+            var request = InputRequest.OfFamily(option.Family);
+            var names = ready.Select(s => s.SourceGdiName).ToArray();
+            var result = await Task.Run(() =>
+            {
+                var notes = new List<string>();
+                var any = false;
+                foreach (var name in names)
+                {
+                    var one = MonitorHub.SwitchInput(name, request);
+                    notes.Add(one.Message);
+                    any |= one.Success;
+                }
+
+                return new SwitchResult(any, string.Join(Environment.NewLine, notes));
+            }).ConfigureAwait(true);
+            Log(result.Message);
+        }
+        catch (Exception ex)
+        {
+            Log("切換失敗：" + ex.Message);
+        }
+        finally
+        {
+            _isSwitching = false;
+            Raise(nameof(CanBatchSwitch));
+            await RefreshOutputsAsync().ConfigureAwait(true);
         }
     }
 
@@ -276,14 +434,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _identifyWindows.Clear();
     }
 
-    private async Task SwitchAsync(string? gdiDeviceName)
+    private async Task SwitchAsync(string? gdiDeviceName, InputRequest request)
     {
         _isSwitching = true;
-        Raise(nameof(CanSwitchAll));
-        Log(gdiDeviceName is null ? "開始把所有螢幕切到 HDMI…" : $"開始把 {gdiDeviceName} 切到 HDMI…");
+        Raise(nameof(CanBatchSwitch));
+        Log(gdiDeviceName is null
+            ? $"開始把所有螢幕切到 {request.DisplayName}…"
+            : $"開始把螢幕切到 {request.DisplayName}…");
         try
         {
-            var result = await Task.Run(() => MonitorHub.SwitchToHdmi(gdiDeviceName)).ConfigureAwait(true);
+            var result = await Task.Run(() => MonitorHub.SwitchInput(gdiDeviceName, request)).ConfigureAwait(true);
             Log(result.Message);
         }
         catch (Exception ex)
@@ -293,9 +453,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         finally
         {
             _isSwitching = false;
-            Raise(nameof(CanSwitchAll));
+            Raise(nameof(CanBatchSwitch));
             await RefreshOutputsAsync().ConfigureAwait(true);
         }
+    }
+
+    private static T? FindDataContext<T>(DependencyObject? start) where T : class
+    {
+        while (start is not null)
+        {
+            if (start is FrameworkElement { DataContext: T match })
+            {
+                return match;
+            }
+
+            start = VisualTreeHelper.GetParent(start);
+        }
+
+        return null;
     }
 
     private void Log(string message)

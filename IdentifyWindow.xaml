@@ -11,23 +11,22 @@
         ShowActivated="False"
         IsHitTestVisible="False"
         Focusable="False">
-    <Border Background="#D9151C26"
-            BorderBrush="#3EE0C5"
+    <Border Background="#E61A1D22"
+            BorderBrush="#059669"
             BorderThickness="1"
-            CornerRadius="10"
-            Padding="20,12">
+            CornerRadius="4"
+            Padding="14,8">
         <StackPanel HorizontalAlignment="Center">
             <TextBlock x:Name="NumberText"
-                       FontSize="40"
+                       FontSize="32"
                        FontWeight="Bold"
-                       Foreground="#3EE0C5"
+                       Foreground="#F2F4F6"
                        HorizontalAlignment="Center"/>
             <TextBlock x:Name="PlaceText"
-                       FontSize="16"
+                       FontSize="13"
                        FontWeight="SemiBold"
-                       Foreground="#E8EEF5"
-                       HorizontalAlignment="Center"
-                       Margin="0,2,0,0"/>
+                       Foreground="#9AA3AD"
+                       HorizontalAlignment="Center"/>
         </StackPanel>
     </Border>
 </Window>

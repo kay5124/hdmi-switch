@@ -13,7 +13,19 @@ public enum SignalKind
 public sealed record InputChip(
     string Label,
     SignalKind Signal,
-    bool IsCurrent);
+    bool IsCurrent,
+    byte? Code)
+{
+    public bool CanActivate => Code.HasValue;
+
+    public string Hint => Signal switch
+    {
+        SignalKind.On when IsCurrent => "目前畫面（這台電腦有在輸出）",
+        SignalKind.On => "這台電腦有接到這個輸入",
+        SignalKind.Off => "這台電腦沒有接到這個輸入，切過去畫面可能會暗掉",
+        _ => "無法確認這個輸入有沒有訊號"
+    };
+}
 
 public sealed class OutputItem : INotifyPropertyChanged
 {
@@ -31,7 +43,7 @@ public sealed class OutputItem : INotifyPropertyChanged
     public required string PathText { get; set; }
     public required string CurrentInputText { get; set; }
     public required string DdcText { get; set; }
-    public required bool CanSwitchToHdmi { get; set; }
+    public required bool CanSwitch { get; set; }
     public required bool CanEnableWindowsHdmi { get; set; }
     public required IReadOnlyList<InputChip> Inputs { get; set; }
     public bool HasDesktopBounds { get; init; }
@@ -74,7 +86,7 @@ public sealed class OutputItem : INotifyPropertyChanged
         Assign(nameof(PathText), PathText, source.PathText, v => PathText = v);
         Assign(nameof(CurrentInputText), CurrentInputText, source.CurrentInputText, v => CurrentInputText = v);
         Assign(nameof(DdcText), DdcText, source.DdcText, v => DdcText = v);
-        Assign(nameof(CanSwitchToHdmi), CanSwitchToHdmi, source.CanSwitchToHdmi, v => CanSwitchToHdmi = v);
+        Assign(nameof(CanSwitch), CanSwitch, source.CanSwitch, v => CanSwitch = v);
         Assign(nameof(CanEnableWindowsHdmi), CanEnableWindowsHdmi, source.CanEnableWindowsHdmi, v => CanEnableWindowsHdmi = v);
         if (!Inputs.SequenceEqual(source.Inputs))
         {
@@ -97,6 +109,12 @@ public sealed class OutputItem : INotifyPropertyChanged
         IsAppHere = source.IsAppHere;
         IsMouseHere = source.IsMouseHere;
     }
+
+    public bool HasLikelySignal(InputFamily family) =>
+        Inputs.Any(chip =>
+            chip.Code is byte code &&
+            InputSelect.FamilyOf(code) == family &&
+            chip.Signal != SignalKind.Off);
 
     private void Assign<T>(string name, T current, T next, Action<T> setter)
     {
@@ -199,8 +217,8 @@ internal static class MonitorHub
         };
     }
 
-    public static SwitchResult SwitchToHdmi(string? gdiDeviceName) =>
-        DdcService.SwitchToHdmi(gdiDeviceName);
+    public static SwitchResult SwitchInput(string? gdiDeviceName, InputRequest request) =>
+        DdcService.SwitchInput(gdiDeviceName, request);
 
     public static void EnableWindowsHdmi()
     {
@@ -216,11 +234,7 @@ internal static class MonitorHub
     {
         var signal = ResolveGpuSignal(gpu);
         var inputs = BuildChips(gpu, ddc, signal);
-        var canSwitch = ddc?.Supported == true && inputs.Any(i => i.Label.StartsWith("HDMI", StringComparison.Ordinal));
-        if (ddc?.Supported == true && !canSwitch)
-        {
-            canSwitch = true;
-        }
+        var canSwitch = ddc?.Supported == true;
 
         return new OutputItem
         {
@@ -241,7 +255,7 @@ internal static class MonitorHub
                 : ddc.Supported
                     ? "DDC/CI 可用"
                     : ddc.Error ?? "DDC/CI 不可用",
-            CanSwitchToHdmi = canSwitch,
+            CanSwitch = canSwitch,
             CanEnableWindowsHdmi = gpu.OutputTechnology == Native.OutputTechnology.Hdmi
                 && gpu.TargetAvailable
                 && !gpu.IsActive,
@@ -269,9 +283,9 @@ internal static class MonitorHub
             PathText = "這些 HDMI 孔目前沒有偵測到螢幕（沒有 HPD／EDID）",
             CurrentInputText = "無",
             DdcText = "沒有接上螢幕，無法切換輸入源",
-            CanSwitchToHdmi = false,
+            CanSwitch = false,
             CanEnableWindowsHdmi = false,
-            Inputs = [new InputChip("HDMI", SignalKind.Off, false)]
+            Inputs = [new InputChip("HDMI", SignalKind.Off, false, null)]
         };
 
     private static OutputItem ToOrphanDdcItem(DdcState ddc, PhysicalScreen? screen)
@@ -290,7 +304,7 @@ internal static class MonitorHub
             PathText = "本機正在輸出",
             CurrentInputText = ddc.CurrentInput is byte code ? InputSelect.Name(code) : "無法讀取",
             DdcText = ddc.Supported ? "DDC/CI 可用" : ddc.Error ?? "DDC/CI 不可用",
-            CanSwitchToHdmi = ddc.Supported,
+            CanSwitch = ddc.Supported,
             CanEnableWindowsHdmi = false,
             Inputs = BuildChips(null, ddc, signal),
             HasDesktopBounds = screen is not null,
@@ -343,7 +357,7 @@ internal static class MonitorHub
         {
             if (gpu is not null)
             {
-                chips.Add(new InputChip(gpu.Connector, gpuSignal, gpu.IsActive));
+                chips.Add(new InputChip(gpu.Connector, gpuSignal, gpu.IsActive, null));
             }
 
             return chips;
@@ -352,19 +366,43 @@ internal static class MonitorHub
         foreach (var code in codes)
         {
             var isCurrent = ddc?.CurrentInput == code;
-            SignalKind signal;
-            if (isCurrent)
-            {
-                signal = gpuSignal == SignalKind.Off ? SignalKind.Unknown : SignalKind.On;
-            }
-            else
-            {
-                signal = SignalKind.Unknown;
-            }
-
-            chips.Add(new InputChip(InputSelect.Name(code), signal, isCurrent));
+            var signal = ResolveChipSignal(code, ddc?.CurrentInput, gpu);
+            chips.Add(new InputChip(InputSelect.Name(code), signal, isCurrent, code));
         }
 
         return chips;
+    }
+
+    private static SignalKind ResolveChipSignal(byte code, byte? current, GpuOutput? gpu)
+    {
+        if (current == code)
+        {
+            return SignalKind.On;
+        }
+
+        var chipFamily = InputSelect.FamilyOf(code);
+        var gpuFamily = gpu is null ? null : InputSelect.FamilyFromTechnology(gpu.OutputTechnology);
+        if (chipFamily is null)
+        {
+            return SignalKind.Unknown;
+        }
+
+        // 本機用這條線接這台螢幕 → 這類輸入才可能有這台電腦的畫面
+        if (gpuFamily is not null && chipFamily == gpuFamily)
+        {
+            if (current is byte currentCode && InputSelect.FamilyOf(currentCode) == chipFamily)
+            {
+                return SignalKind.Off;
+            }
+
+            return SignalKind.On;
+        }
+
+        if (gpuFamily is not null)
+        {
+            return SignalKind.Off;
+        }
+
+        return SignalKind.Unknown;
     }
 }

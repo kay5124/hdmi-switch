@@ -5,121 +5,169 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="HDMI 監控切換"
-        Height="780" Width="1080"
-        MinHeight="620" MinWidth="900"
-        Background="{StaticResource BgBrush}"
-        FontFamily="Segoe UI, Microsoft JhengHei UI">
-    <Grid Margin="20">
+        Height="720" Width="1040"
+        MinHeight="560" MinWidth="840"
+        Background="{StaticResource BgBrush}">
+    <Grid>
+        <Grid Margin="16" Visibility="{Binding IsReady, Converter={StaticResource TrueToVisible}}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="120"/>
+            <RowDefinition Height="88"/>
         </Grid.RowDefinitions>
 
-        <DockPanel Grid.Row="0" Margin="0,0,0,12">
-            <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center">
-                <TextBlock Text="{Binding CurrentScreenText}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Right"/>
-                <TextBlock Text="{Binding SummaryText}" FontSize="12" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" Margin="0,4,0,0"/>
-                <TextBlock Text="{Binding RefreshText}" FontSize="12" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" Margin="0,2,0,0"/>
+        <Grid Grid.Row="0" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                <TextBlock Text="HDMI Switch" FontSize="20" FontWeight="SemiBold"/>
+                <TextBlock Margin="0,2,0,0" FontSize="12" Foreground="{StaticResource MutedBrush}"
+                           TextWrapping="Wrap"
+                           Text="點螢幕上的輸入名稱切換該台。琥珀框是這個視窗所在的那一台。"/>
             </StackPanel>
-            <StackPanel>
-                <TextBlock Text="HDMI 監控切換" FontSize="22" FontWeight="SemiBold"/>
-                <TextBlock Margin="0,4,0,0" FontSize="13" Foreground="{StaticResource MutedBrush}"
-                           Text="排列與 Windows 桌面相同。青框是這個視窗所在的螢幕；按「識別」會在真實螢幕上跳出編號。"/>
-            </StackPanel>
-        </DockPanel>
+            <WrapPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Border Style="{StaticResource StatusChip}" Margin="0,0,8,6"
+                        BorderBrush="{StaticResource HereBrush}" BorderThickness="1">
+                    <TextBlock FontSize="12">
+                        <Run Text="視窗  " Foreground="{StaticResource MutedBrush}"/>
+                        <Run Text="{Binding CurrentScreenText, Mode=OneWay}" Foreground="{StaticResource HereBrush}" FontWeight="SemiBold"/>
+                    </TextBlock>
+                </Border>
+                <Border Style="{StaticResource StatusChip}" Margin="0,0,8,6">
+                    <TextBlock FontSize="12" Text="{Binding SummaryText}" Foreground="{StaticResource MutedBrush}"/>
+                </Border>
+                <Border Style="{StaticResource StatusChip}" Margin="0,0,0,6">
+                    <TextBlock FontSize="12" Text="{Binding RefreshText}" Foreground="{StaticResource MutedBrush}"/>
+                </Border>
+            </WrapPanel>
+        </Grid>
 
-        <Border Grid.Row="1" Background="{StaticResource PanelBrush}" CornerRadius="12" Padding="10">
-            <Viewbox Stretch="Uniform">
-                <ItemsControl Width="900" Height="300" ItemsSource="{Binding DesktopScreens}">
+        <Border Grid.Row="1" Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="8"
+                BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding DesktopScreens}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <Canvas Width="900" Height="300"/>
+                            <UniformGrid Rows="1"/>
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemContainerStyle>
-                        <Style TargetType="ContentPresenter">
-                            <Setter Property="Canvas.Left" Value="{Binding LayoutX}"/>
-                            <Setter Property="Canvas.Top" Value="{Binding LayoutY}"/>
-                        </Style>
-                    </ItemsControl.ItemContainerStyle>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Width="{Binding LayoutW}" Height="{Binding LayoutH}"
+                            <Border Margin="8" MinHeight="168" MinWidth="180"
                                     Background="{StaticResource CardBrush}"
                                     BorderThickness="2"
-                                    CornerRadius="10"
-                                    Padding="10">
+                                    CornerRadius="6"
+                                    Padding="14,12"
+                                    SnapsToDevicePixels="True"
+                                    ToolTip="{Binding PlaceTitle}"
+                                    VerticalAlignment="Stretch">
                                 <Border.Style>
                                     <Style TargetType="Border">
                                         <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsAppHere}" Value="True">
-                                                <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
-                                                <Setter Property="BorderThickness" Value="3"/>
+                                                <Setter Property="BorderBrush" Value="{StaticResource HereBrush}"/>
+                                                <Setter Property="BorderThickness" Value="2"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
                                 </Border.Style>
                                 <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="*"/>
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
-                                    <DockPanel>
-                                        <TextBlock DockPanel.Dock="Right" FontSize="28" FontWeight="Bold"
-                                                   Foreground="{StaticResource AccentBrush}"
-                                                   Text="{Binding DisplayNumber}" VerticalAlignment="Center"/>
+
+                                    <TextBlock Grid.RowSpan="2"
+                                               Text="{Binding DisplayNumber}"
+                                               FontSize="36" FontWeight="Bold"
+                                               Foreground="{StaticResource TextBrush}"
+                                               Opacity="0.92"
+                                               VerticalAlignment="Top"
+                                               Margin="0,2,10,0"/>
+
+                                    <DockPanel Grid.Column="1" LastChildFill="True">
+                                        <WrapPanel DockPanel.Dock="Right" Margin="8,0,0,0">
+                                            <Border Padding="6,1" CornerRadius="3" Background="#3A2A12" Margin="0,0,0,4"
+                                                    Visibility="{Binding IsAppHere, Converter={StaticResource TrueToVisible}}">
+                                                <TextBlock Text="視窗" FontSize="10" Foreground="{StaticResource HereBrush}"/>
+                                            </Border>
+                                            <Border Padding="6,1" CornerRadius="3" Background="#2A2F36" Margin="0,0,0,4"
+                                                    Visibility="{Binding IsMouseHere, Converter={StaticResource TrueToVisible}}">
+                                                <TextBlock Text="滑鼠" FontSize="10" Foreground="{StaticResource MutedBrush}"/>
+                                            </Border>
+                                        </WrapPanel>
                                         <StackPanel>
-                                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding PlaceLabel}"/>
-                                            <TextBlock FontSize="12" Foreground="{StaticResource MutedBrush}" Text="{Binding Title}" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding PlaceLabel}"
+                                                       LineHeight="22" LineStackingStrategy="BlockLineHeight"
+                                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock FontSize="11" Foreground="{StaticResource MutedBrush}"
+                                                       Text="{Binding Title}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                                            <TextBlock FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"
+                                                       TextWrapping="Wrap">
+                                                <Run Text="{Binding Connector, Mode=OneWay}"/>
+                                                <Run Text="  ·  "/>
+                                                <Run Text="{Binding CurrentInputText, Mode=OneWay}"/>
+                                            </TextBlock>
                                         </StackPanel>
                                     </DockPanel>
-                                    <StackPanel Grid.Row="1" Margin="0,6,0,4">
-                                        <TextBlock FontSize="12" Foreground="{StaticResource MutedBrush}">
-                                            <Run Text="{Binding Connector, Mode=OneWay}"/>
-                                            <Run Text=" · "/>
-                                            <Run Text="{Binding CurrentInputText, Mode=OneWay}"/>
-                                        </TextBlock>
-                                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                                            <Border Padding="6,2" CornerRadius="6" Background="#123F3A" Margin="0,0,6,0"
-                                                    Visibility="{Binding IsAppHere, Converter={StaticResource TrueToVisible}}">
-                                                <TextBlock Text="視窗在這裡" FontSize="11" Foreground="{StaticResource AccentBrush}"/>
-                                            </Border>
-                                            <Border Padding="6,2" CornerRadius="6" Background="#223044"
-                                                    Visibility="{Binding IsMouseHere, Converter={StaticResource TrueToVisible}}">
-                                                <TextBlock Text="滑鼠在這裡" FontSize="11" Foreground="{StaticResource MutedBrush}"/>
-                                            </Border>
-                                        </StackPanel>
-                                    </StackPanel>
-                                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                                        <Button Style="{StaticResource GhostButton}" Content="識別" Padding="10,5"
-                                                Click="IdentifyOne_OnClick" Margin="0,0,6,0"/>
-                                        <Button Style="{StaticResource GhostButton}" Content="切到 HDMI" Padding="10,5"
-                                                IsEnabled="{Binding CanSwitchToHdmi}" Click="SwitchOne_OnClick"/>
-                                    </StackPanel>
+
+                                    <ItemsControl Grid.Row="1" Grid.Column="1"
+                                                  ItemsSource="{Binding Inputs}" Margin="0,10,0,8"
+                                                  VerticalAlignment="Top">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Style="{StaticResource InputChipButton}"
+                                                        Content="{Binding Label}"
+                                                        IsEnabled="{Binding CanActivate}"
+                                                        Click="SwitchInputChip_OnClick"
+                                                        ToolTip="{Binding Hint}"
+                                                        AutomationProperties.Name="{Binding Label}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <Button Grid.Row="2" Grid.Column="1"
+                                            Style="{StaticResource GhostButton}" Content="識別"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Bottom"
+                                            AutomationProperties.Name="識別這台螢幕"
+                                            Click="IdentifyOne_OnClick"/>
                                 </Grid>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-            </Viewbox>
+            </ScrollViewer>
         </Border>
 
-        <ItemsControl Grid.Row="2" ItemsSource="{Binding OtherOutputs}" Margin="0,10,0,0">
+        <ItemsControl Grid.Row="2" ItemsSource="{Binding OtherOutputs}" Margin="0,8,0,0">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <Border Background="{StaticResource CardBrush}" CornerRadius="8" Padding="12,8" Margin="0,0,0,8">
+                    <Border Background="{StaticResource CardBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,6"
+                            BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
                         <DockPanel>
-                            <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Content="讓 Windows 使用此 HDMI"
+                            <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Content="使用此 HDMI"
+                                    AutomationProperties.Name="讓 Windows 使用此 HDMI 輸出"
                                     Visibility="{Binding CanEnableWindowsHdmi, Converter={StaticResource TrueToVisible}}"
                                     Click="EnableWindowsHdmi_OnClick"/>
                             <StackPanel>
-                                <TextBlock FontWeight="SemiBold" Text="{Binding Title}"/>
-                                <TextBlock FontSize="12" Foreground="{StaticResource MutedBrush}" Text="{Binding PathText}"/>
+                                <TextBlock FontWeight="SemiBold" FontSize="13" Text="{Binding Title}"/>
+                                <TextBlock FontSize="11" Foreground="{StaticResource MutedBrush}" Text="{Binding PathText}"/>
                             </StackPanel>
                         </DockPanel>
                     </Border>
@@ -127,31 +175,81 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <DockPanel Grid.Row="3" Margin="0,4,0,10">
-            <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Content="識別所有螢幕"
-                    Click="IdentifyAll_OnClick" Margin="10,0,0,0" Padding="14,10"/>
-            <Button Style="{StaticResource PrimaryButton}" Content="全部切到 HDMI"
-                    Click="SwitchAll_OnClick" IsEnabled="{Binding CanSwitchAll}"/>
-        </DockPanel>
+        <Grid Grid.Row="3" Margin="0,4,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Button Style="{StaticResource GhostButton}" Content="識別全部"
+                    AutomationProperties.Name="在所有螢幕顯示編號"
+                    Click="IdentifyAll_OnClick" Padding="14,10"/>
+            <DockPanel Grid.Column="1" Margin="12,0,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="全部切到"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource MutedBrush}"
+                           FontSize="12"
+                           Margin="0,0,8,0"/>
+                <ItemsControl ItemsSource="{Binding BatchInputOptions}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel VerticalAlignment="Center"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource GhostButton}"
+                                    Content="{Binding Label}"
+                                    Margin="0,0,8,0"
+                                    Padding="14,10"
+                                    IsEnabled="{Binding DataContext.CanBatchSwitch, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    Click="SwitchAllFamily_OnClick"
+                                    AutomationProperties.Name="{Binding Label}"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </DockPanel>
+        </Grid>
 
-        <Border Grid.Row="4" Background="{StaticResource PanelBrush}" CornerRadius="10" Padding="12">
+        <Border Grid.Row="4" Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="10,8"
+                BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
             <DockPanel>
-                <TextBlock DockPanel.Dock="Top" Text="紀錄" FontSize="12" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,6"/>
+                <TextBlock DockPanel.Dock="Top" Text="活動" FontSize="11" FontWeight="SemiBold"
+                           Foreground="{StaticResource MutedBrush}" Margin="0,0,0,4"/>
                 <ListBox ItemsSource="{Binding Logs}"
                          Background="Transparent"
                          BorderThickness="0"
                          Focusable="False"
                          Foreground="{StaticResource MutedBrush}"
-                         FontSize="12"
+                         FontSize="11"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
-                            <Setter Property="Padding" Value="0,2"/>
+                            <Setter Property="Padding" Value="0,1"/>
                             <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <ContentPresenter/>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
                         </Style>
                     </ListBox.ItemContainerStyle>
                 </ListBox>
             </DockPanel>
+        </Border>
+        </Grid>
+
+        <Border Background="{StaticResource BgBrush}"
+                Visibility="{Binding IsReady, Converter={StaticResource FalseToVisible}}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="HDMI Switch" FontSize="22" FontWeight="SemiBold"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Margin="0,8,0,20" FontSize="13" Foreground="{StaticResource MutedBrush}"
+                           HorizontalAlignment="Center"
+                           Text="正在讀取螢幕與輸入來源…"/>
+                <ProgressBar Width="240" IsIndeterminate="True"/>
+            </StackPanel>
         </Border>
     </Grid>
 </Window>

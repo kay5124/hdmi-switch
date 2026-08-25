@@ -1,4 +1,16 @@
+using HdmiSwitch.Native;
+
 namespace HdmiSwitch.Services;
+
+public enum InputFamily
+{
+    Hdmi,
+    DisplayPort,
+    Vga,
+    Dvi
+}
+
+public sealed record InputOption(string Label, InputFamily Family);
 
 internal static class InputSelect
 {
@@ -6,10 +18,45 @@ internal static class InputSelect
     public static readonly byte Hdmi2 = 0x12;
     public static readonly byte Hdmi3 = 0x13;
 
-    public static IReadOnlyList<byte> HdmiPreferenceOrder { get; } = [Hdmi1, Hdmi2, Hdmi3];
+    public static IReadOnlyList<InputFamily> BatchOrder { get; } =
+        [InputFamily.Hdmi, InputFamily.DisplayPort, InputFamily.Vga, InputFamily.Dvi];
 
-    public static bool IsHdmi(byte code) =>
-        code is 0x11 or 0x12 or 0x13;
+    public static IReadOnlyList<byte> Preference(InputFamily family) => family switch
+    {
+        InputFamily.Hdmi => [0x11, 0x12, 0x13],
+        InputFamily.DisplayPort => [0x0F, 0x10],
+        InputFamily.Vga => [0x01, 0x02],
+        InputFamily.Dvi => [0x03, 0x04],
+        _ => []
+    };
+
+    public static InputFamily? FamilyFromTechnology(int technology) => technology switch
+    {
+        OutputTechnology.Hdmi => InputFamily.Hdmi,
+        OutputTechnology.Dvi => InputFamily.Dvi,
+        OutputTechnology.Hd15 => InputFamily.Vga,
+        OutputTechnology.DisplayPortExternal or OutputTechnology.DisplayPortEmbedded
+            or OutputTechnology.DisplayPortUsbTunnel => InputFamily.DisplayPort,
+        _ => null
+    };
+
+    public static InputFamily? FamilyOf(byte code) => code switch
+    {
+        0x11 or 0x12 or 0x13 => InputFamily.Hdmi,
+        0x0F or 0x10 => InputFamily.DisplayPort,
+        0x01 or 0x02 => InputFamily.Vga,
+        0x03 or 0x04 => InputFamily.Dvi,
+        _ => null
+    };
+
+    public static string FamilyName(InputFamily family) => family switch
+    {
+        InputFamily.Hdmi => "HDMI",
+        InputFamily.DisplayPort => "DisplayPort",
+        InputFamily.Vga => "VGA",
+        InputFamily.Dvi => "DVI",
+        _ => family.ToString()
+    };
 
     public static string Name(byte code) => code switch
     {
@@ -59,4 +106,17 @@ internal static class InputSelect
 
         return values;
     }
+}
+
+internal readonly record struct InputRequest(byte? ExactCode, InputFamily? Family)
+{
+    public static InputRequest Exact(byte code) => new(code, null);
+
+    public static InputRequest OfFamily(InputFamily family) => new(null, family);
+
+    public string DisplayName => ExactCode is byte code
+        ? InputSelect.Name(code)
+        : Family is InputFamily family
+            ? InputSelect.FamilyName(family)
+            : "輸入";
 }

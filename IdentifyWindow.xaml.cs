@@ -7,11 +7,20 @@ namespace HdmiSwitch;
 
 public partial class IdentifyWindow : Window
 {
+    private readonly DispatcherTimer _autoCloseTimer;
+
     public IdentifyWindow(int number, string place)
     {
         InitializeComponent();
         NumberText.Text = number.ToString();
         PlaceText.Text = place;
+        _autoCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.4) };
+        _autoCloseTimer.Tick += OnAutoClose;
+        Closing += (_, _) =>
+        {
+            _autoCloseTimer.Stop();
+            _autoCloseTimer.Tick -= OnAutoClose;
+        };
     }
 
     public void ShowOn(int pixelLeft, int pixelTop, int pixelWidth, int pixelHeight)
@@ -44,13 +53,13 @@ public partial class IdentifyWindow : Window
             height,
             NativeMethods.SwpShowWindow | NativeMethods.SwpNoActivate);
 
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.4) };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            Close();
-        };
-        timer.Start();
+        _autoCloseTimer.Start();
+    }
+
+    private void OnAutoClose(object? sender, EventArgs e)
+    {
+        _autoCloseTimer.Stop();
+        Close();
     }
 
     private static void MakeClickThrough(IntPtr hwnd)

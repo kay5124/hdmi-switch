@@ -18,8 +18,8 @@ internal sealed record PhysicalScreen(
 
 internal static class ScreenLayout
 {
-    public const double CanvasWidth = 900;
-    public const double CanvasHeight = 300;
+    public const double CanvasWidth = 960;
+    public const double CanvasHeight = 360;
 
     public static IReadOnlyList<PhysicalScreen> Query()
     {
@@ -196,7 +196,8 @@ internal static class ScreenLayout
 
     private static void AssignCanvas(List<OutputItem> placed)
     {
-        const double pad = 16;
+        const double pad = 28;
+        const double tileGap = 36;
         var minL = placed.Min(i => i.PixelLeft);
         var minT = placed.Min(i => i.PixelTop);
         var maxR = placed.Max(i => i.PixelLeft + i.PixelWidth);
@@ -210,10 +211,10 @@ internal static class ScreenLayout
         var offsetY = pad + (innerH - unionH * scale) / 2;
         foreach (var item in placed)
         {
-            item.LayoutX = offsetX + (item.PixelLeft - minL) * scale;
-            item.LayoutY = offsetY + (item.PixelTop - minT) * scale;
-            item.LayoutW = Math.Max(item.PixelWidth * scale, 120);
-            item.LayoutH = Math.Max(item.PixelHeight * scale, 88);
+            item.LayoutX = offsetX + (item.PixelLeft - minL) * scale + tileGap / 2;
+            item.LayoutY = offsetY + (item.PixelTop - minT) * scale + tileGap / 2;
+            item.LayoutW = Math.Max(item.PixelWidth * scale - tileGap, 200);
+            item.LayoutH = Math.Max(item.PixelHeight * scale - tileGap, 176);
         }
     }
 

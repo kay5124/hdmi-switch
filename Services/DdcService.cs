@@ -35,7 +35,7 @@ internal static class DdcService
         return results;
     }
 
-    public static SwitchResult SwitchToHdmi(string? gdiDeviceName)
+    public static SwitchResult SwitchInput(string? gdiDeviceName, InputRequest request)
     {
         var targets = QueryPhysicalTargets()
             .Where(t => gdiDeviceName is null ||
@@ -51,7 +51,7 @@ internal static class DdcService
         var anySuccess = false;
         foreach (var target in targets)
         {
-            var result = SwitchPhysicalMonitor(target);
+            var result = SwitchPhysicalMonitor(target, request);
             notes.Add(result.Message);
             anySuccess |= result.Success;
         }
@@ -94,7 +94,7 @@ internal static class DdcService
         }
     }
 
-    private static SwitchResult SwitchPhysicalMonitor(PhysicalTarget target)
+    private static SwitchResult SwitchPhysicalMonitor(PhysicalTarget target, InputRequest request)
     {
         var physical = OpenPhysical(target.HMonitor);
         if (physical is null)
@@ -107,19 +107,17 @@ internal static class DdcService
             var handle = physical.Value.Monitors[0].hPhysicalMonitor;
             var caps = TryReadCapabilities(handle, target.GdiDeviceName);
             var available = InputSelect.ParseAvailableInputs(caps ?? string.Empty);
-            TryGetInput(handle, out var current);
+            byte? current = TryGetInput(handle, out var value) ? value : null;
 
-            if (current is byte currentCode && InputSelect.IsHdmi(currentCode))
+            if (current is byte currentCode && AlreadyOnTarget(currentCode, request))
             {
                 return SwitchResult.Ok(target.Description, $"已經是 {InputSelect.Name(currentCode)}。");
             }
 
-            var candidates = InputSelect.HdmiPreferenceOrder
-                .Where(code => available.Count == 0 || available.Contains(code))
-                .ToArray();
+            var candidates = Candidates(request, available);
             if (candidates.Length == 0)
             {
-                candidates = InputSelect.HdmiPreferenceOrder.ToArray();
+                return SwitchResult.Fail(target.Description, $"這台螢幕沒有可用的 {request.DisplayName} 輸入。");
             }
 
             foreach (var code in candidates)
@@ -138,12 +136,39 @@ internal static class DdcService
                 return SwitchResult.Ok(target.Description, $"已切到 {InputSelect.Name(code)}。");
             }
 
-            return SwitchResult.Fail(target.Description, "HDMI-1 / HDMI-2 切換都沒有成功。");
+            return SwitchResult.Fail(target.Description, $"切到 {request.DisplayName} 沒有成功。");
         }
         finally
         {
             physical.Value.Dispose();
         }
+    }
+
+    private static bool AlreadyOnTarget(byte current, InputRequest request)
+    {
+        if (request.ExactCode is byte exact)
+        {
+            return current == exact;
+        }
+
+        return request.Family is InputFamily family && InputSelect.FamilyOf(current) == family;
+    }
+
+    private static byte[] Candidates(InputRequest request, IReadOnlyList<byte> available)
+    {
+        if (request.ExactCode is byte exact)
+        {
+            return [exact];
+        }
+
+        if (request.Family is not InputFamily family)
+        {
+            return [];
+        }
+
+        var preferred = InputSelect.Preference(family);
+        var filtered = preferred.Where(code => available.Count == 0 || available.Contains(code)).ToArray();
+        return filtered.Length > 0 ? filtered : preferred.ToArray();
     }
 
     private static bool TryGetInput(IntPtr handle, out byte current)
