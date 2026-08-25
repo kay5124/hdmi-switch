@@ -15,6 +15,11 @@ internal static class NativeMethods
     public const int CchDeviceName = 32;
     public const uint MonitorDefaultToNearest = 2;
     public const uint MonitorInfoPrimary = 1;
+    public const int GwlExStyle = -20;
+    public const int WsExTransparent = 0x00000020;
+    public const int WsExNoActivate = 0x08000000;
+    public const int WsExToolWindow = 0x00000080;
+    public const int MonitorDpiEffective = 0;
     public const uint SwpNoActivate = 0x0010;
     public const uint SwpShowWindow = 0x0040;
 
@@ -37,6 +42,15 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("Shcore.dll")]
+    public static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
     [DllImport("user32.dll")]
     public static extern int GetDisplayConfigBufferSizes(uint flags, out uint numPathArrayElements, out uint numModeInfoArrayElements);

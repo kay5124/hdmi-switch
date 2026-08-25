@@ -8,8 +8,7 @@
         Height="780" Width="1080"
         MinHeight="620" MinWidth="900"
         Background="{StaticResource BgBrush}"
-        FontFamily="Segoe UI, Microsoft JhengHei UI"
-        LocationChanged="MainWindow_OnLocationChanged">
+        FontFamily="Segoe UI, Microsoft JhengHei UI">
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>

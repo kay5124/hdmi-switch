@@ -21,25 +21,25 @@ public sealed class OutputItem : INotifyPropertyChanged
     private bool _isMouseHere;
 
     public required string Key { get; init; }
-    public required string Title { get; init; }
-    public required string Connector { get; init; }
-    public required string SourceGdiName { get; init; }
-    public required bool IsActive { get; init; }
-    public required bool TargetAvailable { get; init; }
-    public required SignalKind Signal { get; init; }
-    public required string SignalText { get; init; }
-    public required string PathText { get; init; }
-    public required string CurrentInputText { get; init; }
-    public required string DdcText { get; init; }
-    public required bool CanSwitchToHdmi { get; init; }
-    public required bool CanEnableWindowsHdmi { get; init; }
-    public required IReadOnlyList<InputChip> Inputs { get; init; }
+    public required string Title { get; set; }
+    public required string Connector { get; set; }
+    public required string SourceGdiName { get; set; }
+    public required bool IsActive { get; set; }
+    public required bool TargetAvailable { get; set; }
+    public required SignalKind Signal { get; set; }
+    public required string SignalText { get; set; }
+    public required string PathText { get; set; }
+    public required string CurrentInputText { get; set; }
+    public required string DdcText { get; set; }
+    public required bool CanSwitchToHdmi { get; set; }
+    public required bool CanEnableWindowsHdmi { get; set; }
+    public required IReadOnlyList<InputChip> Inputs { get; set; }
     public bool HasDesktopBounds { get; init; }
-    public bool IsPrimary { get; init; }
-    public int PixelLeft { get; init; }
-    public int PixelTop { get; init; }
-    public int PixelWidth { get; init; }
-    public int PixelHeight { get; init; }
+    public bool IsPrimary { get; set; }
+    public int PixelLeft { get; set; }
+    public int PixelTop { get; set; }
+    public int PixelWidth { get; set; }
+    public int PixelHeight { get; set; }
     public int DisplayNumber { get; set; }
     public string PlaceLabel { get; set; } = string.Empty;
     public string PlaceTitle { get; set; } = string.Empty;
@@ -51,34 +51,74 @@ public sealed class OutputItem : INotifyPropertyChanged
     public bool IsAppHere
     {
         get => _isAppHere;
-        set
-        {
-            if (_isAppHere == value)
-            {
-                return;
-            }
-
-            _isAppHere = value;
-            OnPropertyChanged();
-        }
+        set => Set(ref _isAppHere, value);
     }
 
     public bool IsMouseHere
     {
         get => _isMouseHere;
-        set
-        {
-            if (_isMouseHere == value)
-            {
-                return;
-            }
-
-            _isMouseHere = value;
-            OnPropertyChanged();
-        }
+        set => Set(ref _isMouseHere, value);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public void ApplyFrom(OutputItem source)
+    {
+        Assign(nameof(Title), Title, source.Title, v => Title = v);
+        Assign(nameof(Connector), Connector, source.Connector, v => Connector = v);
+        Assign(nameof(SourceGdiName), SourceGdiName, source.SourceGdiName, v => SourceGdiName = v);
+        Assign(nameof(IsActive), IsActive, source.IsActive, v => IsActive = v);
+        Assign(nameof(TargetAvailable), TargetAvailable, source.TargetAvailable, v => TargetAvailable = v);
+        Assign(nameof(Signal), Signal, source.Signal, v => Signal = v);
+        Assign(nameof(SignalText), SignalText, source.SignalText, v => SignalText = v);
+        Assign(nameof(PathText), PathText, source.PathText, v => PathText = v);
+        Assign(nameof(CurrentInputText), CurrentInputText, source.CurrentInputText, v => CurrentInputText = v);
+        Assign(nameof(DdcText), DdcText, source.DdcText, v => DdcText = v);
+        Assign(nameof(CanSwitchToHdmi), CanSwitchToHdmi, source.CanSwitchToHdmi, v => CanSwitchToHdmi = v);
+        Assign(nameof(CanEnableWindowsHdmi), CanEnableWindowsHdmi, source.CanEnableWindowsHdmi, v => CanEnableWindowsHdmi = v);
+        if (!Inputs.SequenceEqual(source.Inputs))
+        {
+            Inputs = source.Inputs;
+            OnPropertyChanged(nameof(Inputs));
+        }
+
+        Assign(nameof(IsPrimary), IsPrimary, source.IsPrimary, v => IsPrimary = v);
+        Assign(nameof(PixelLeft), PixelLeft, source.PixelLeft, v => PixelLeft = v);
+        Assign(nameof(PixelTop), PixelTop, source.PixelTop, v => PixelTop = v);
+        Assign(nameof(PixelWidth), PixelWidth, source.PixelWidth, v => PixelWidth = v);
+        Assign(nameof(PixelHeight), PixelHeight, source.PixelHeight, v => PixelHeight = v);
+        Assign(nameof(DisplayNumber), DisplayNumber, source.DisplayNumber, v => DisplayNumber = v);
+        Assign(nameof(PlaceLabel), PlaceLabel, source.PlaceLabel, v => PlaceLabel = v);
+        Assign(nameof(PlaceTitle), PlaceTitle, source.PlaceTitle, v => PlaceTitle = v);
+        Assign(nameof(LayoutX), LayoutX, source.LayoutX, v => LayoutX = v);
+        Assign(nameof(LayoutY), LayoutY, source.LayoutY, v => LayoutY = v);
+        Assign(nameof(LayoutW), LayoutW, source.LayoutW, v => LayoutW = v);
+        Assign(nameof(LayoutH), LayoutH, source.LayoutH, v => LayoutH = v);
+        IsAppHere = source.IsAppHere;
+        IsMouseHere = source.IsMouseHere;
+    }
+
+    private void Assign<T>(string name, T current, T next, Action<T> setter)
+    {
+        if (EqualityComparer<T>.Default.Equals(current, next))
+        {
+            return;
+        }
+
+        setter(next);
+        OnPropertyChanged(name);
+    }
+
+    private void Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value))
+        {
+            return;
+        }
+
+        field = value;
+        OnPropertyChanged(name);
+    }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));

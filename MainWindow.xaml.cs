@@ -13,16 +13,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly DispatcherTimer _refreshTimer;
     private readonly DispatcherTimer _hereTimer;
     private readonly List<IdentifyWindow> _identifyWindows = [];
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private int _hereBusy;
     private bool _isSwitching;
+    private bool _closed;
 
     public MainWindow()
     {
         InitializeComponent();
         DataContext = this;
-        _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-        _refreshTimer.Tick += (_, _) => RefreshOutputs();
+        _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _refreshTimer.Tick += (_, _) => _ = RefreshOutputsAsync();
         _hereTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
-        _hereTimer.Tick += (_, _) => RefreshHereFlags();
+        _hereTimer.Tick += (_, _) => _ = RefreshHereFlagsAsync();
         Loaded += OnLoaded;
         Closed += OnClosed;
     }
@@ -48,7 +51,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        RefreshOutputs();
+        _ = RefreshOutputsAsync();
         _refreshTimer.Start();
         _hereTimer.Start();
         Log("開始監控。青框是這個視窗所在的螢幕；「識別」會在真實螢幕顯示左／中／右編號。");
@@ -56,6 +59,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        _closed = true;
         _refreshTimer.Stop();
         _hereTimer.Stop();
         CloseIdentifyWindows();
@@ -74,68 +78,131 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         if (msg == NativeMethods.WmDisplayChange)
         {
-            Dispatcher.BeginInvoke(RefreshOutputs);
+            _ = RefreshOutputsAsync();
         }
 
         return IntPtr.Zero;
     }
 
-    private void MainWindow_OnLocationChanged(object? sender, EventArgs e) => RefreshHereFlags();
-
-    private void RefreshOutputs()
+    private async Task RefreshOutputsAsync()
     {
-        if (_isSwitching)
+        if (_isSwitching || _closed || !await _refreshLock.WaitAsync(0).ConfigureAwait(true))
         {
             return;
         }
 
+        var hwnd = AppHwnd;
         try
         {
-            var snapshot = MonitorHub.Capture(AppHwnd);
-            DesktopScreens.Clear();
-            OtherOutputs.Clear();
-            foreach (var item in snapshot.Outputs)
+            var snapshot = await Task.Run(() => MonitorHub.Capture(hwnd)).ConfigureAwait(true);
+            if (_closed)
             {
-                if (item.HasDesktopBounds)
-                {
-                    DesktopScreens.Add(item);
-                }
-                else
-                {
-                    OtherOutputs.Add(item);
-                }
+                return;
             }
 
-            SummaryText = snapshot.HdmiPortCount == 0
-                ? "這台電腦目前沒有偵測到 HDMI 輸出孔"
-                : $"本機 HDMI：{snapshot.HdmiPortCount} 孔，{snapshot.HdmiWithSinkCount} 孔有螢幕";
-            RefreshText = $"更新於 {snapshot.CapturedAt:HH:mm:ss}";
-            UpdateCurrentScreenText();
-            Raise(nameof(SummaryText), nameof(RefreshText), nameof(CanSwitchAll));
+            ApplySnapshot(snapshot);
         }
         catch (Exception ex)
         {
-            Log("讀取顯示狀態失敗：" + ex.Message);
+            if (!_closed)
+            {
+                Log("讀取顯示狀態失敗：" + ex.Message);
+            }
+        }
+        finally
+        {
+            if (!_closed)
+            {
+                _refreshLock.Release();
+            }
         }
     }
 
-    private void RefreshHereFlags()
+    private void ApplySnapshot(MonitorSnapshot snapshot)
     {
-        if (_isSwitching || DesktopScreens.Count == 0)
+        Merge(
+            DesktopScreens,
+            snapshot.Outputs.Where(o => o.HasDesktopBounds).ToArray());
+        Merge(
+            OtherOutputs,
+            snapshot.Outputs.Where(o => !o.HasDesktopBounds).ToArray());
+
+        SummaryText = snapshot.HdmiPortCount == 0
+            ? "這台電腦目前沒有偵測到 HDMI 輸出孔"
+            : $"本機 HDMI：{snapshot.HdmiPortCount} 孔，{snapshot.HdmiWithSinkCount} 孔有螢幕";
+        RefreshText = $"更新於 {snapshot.CapturedAt:HH:mm:ss}";
+        UpdateCurrentScreenText();
+        Raise(nameof(SummaryText), nameof(RefreshText), nameof(CanSwitchAll));
+    }
+
+    private static void Merge(ObservableCollection<OutputItem> target, IReadOnlyList<OutputItem> next)
+    {
+        var nextByKey = next.ToDictionary(i => i.Key, StringComparer.OrdinalIgnoreCase);
+        for (var i = target.Count - 1; i >= 0; i--)
+        {
+            if (!nextByKey.ContainsKey(target[i].Key))
+            {
+                target.RemoveAt(i);
+            }
+        }
+
+        var existing = target.ToDictionary(i => i.Key, StringComparer.OrdinalIgnoreCase);
+        foreach (var item in next)
+        {
+            if (existing.TryGetValue(item.Key, out var current))
+            {
+                current.ApplyFrom(item);
+            }
+            else
+            {
+                target.Add(item);
+            }
+        }
+    }
+
+    private async Task RefreshHereFlagsAsync()
+    {
+        if (_isSwitching || _closed || DesktopScreens.Count == 0 ||
+            Interlocked.CompareExchange(ref _hereBusy, 1, 0) != 0)
         {
             return;
         }
 
-        ScreenLayout.UpdateHereFlags(DesktopScreens, ScreenLayout.GdiFromWindow(AppHwnd), ScreenLayout.GdiFromCursor());
-        UpdateCurrentScreenText();
+        var hwnd = AppHwnd;
+        try
+        {
+            var (appGdi, mouseGdi) = await Task.Run(() =>
+                (ScreenLayout.GdiFromWindow(hwnd), ScreenLayout.GdiFromCursor())).ConfigureAwait(true);
+            if (_closed)
+            {
+                return;
+            }
+
+            ScreenLayout.UpdateHereFlags(DesktopScreens, appGdi, mouseGdi);
+            UpdateCurrentScreenText();
+        }
+        catch (Exception)
+        {
+            // 游標／視窗所在螢幕偵測失敗時維持上一幀，避免打斷點擊
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _hereBusy, 0);
+        }
     }
 
     private void UpdateCurrentScreenText()
     {
         var here = DesktopScreens.FirstOrDefault(s => s.IsAppHere);
-        CurrentScreenText = here is null
+        var text = here is null
             ? "這個視窗在：無法對應"
             : $"這個視窗在：{here.PlaceTitle}";
+        if (CurrentScreenText == text)
+        {
+            return;
+        }
+
+        CurrentScreenText = text;
         Raise(nameof(CurrentScreenText));
     }
 
@@ -179,7 +246,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         CloseIdentifyWindows();
         foreach (var screen in screens.Where(s => s.HasDesktopBounds))
         {
-            var overlay = new IdentifyWindow(screen.DisplayNumber, screen.PlaceLabel, screen.Title)
+            var overlay = new IdentifyWindow(screen.DisplayNumber, screen.PlaceLabel)
             {
                 Owner = this
             };
@@ -216,7 +283,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         Log(gdiDeviceName is null ? "開始把所有螢幕切到 HDMI…" : $"開始把 {gdiDeviceName} 切到 HDMI…");
         try
         {
-            var result = await Task.Run(() => MonitorHub.SwitchToHdmi(gdiDeviceName));
+            var result = await Task.Run(() => MonitorHub.SwitchToHdmi(gdiDeviceName)).ConfigureAwait(true);
             Log(result.Message);
         }
         catch (Exception ex)
@@ -226,7 +293,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         finally
         {
             _isSwitching = false;
-            RefreshOutputs();
+            Raise(nameof(CanSwitchAll));
+            await RefreshOutputsAsync().ConfigureAwait(true);
         }
     }
 
