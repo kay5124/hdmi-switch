@@ -2,6 +2,8 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -25,6 +27,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _isSwitching;
     private bool _closed;
     private bool _ready;
+    private OutputItem? _dragCandidate;
+    private Point _dragStartPoint;
+
+    private const string ScreenDragFormat = "HdmiSwitch.ScreenCard";
 
     public MainWindow()
     {
@@ -242,7 +248,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         Merge(
             DesktopScreens,
-            snapshot.Outputs.Where(o => o.HasDesktopBounds).ToArray());
+            snapshot.Outputs.Where(o => o.HasDesktopBounds).ToArray(),
+            _dragCandidate is null ? _settings.ScreenOrder : null);
         Merge(
             OtherOutputs,
             snapshot.Outputs.Where(o => !o.HasDesktopBounds).ToArray());
@@ -338,7 +345,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
-    private static void Merge(ObservableCollection<OutputItem> target, IReadOnlyList<OutputItem> next)
+    private static void Merge(
+        ObservableCollection<OutputItem> target,
+        IReadOnlyList<OutputItem> next,
+        IReadOnlyList<string>? order = null)
     {
         var nextByKey = next.ToDictionary(i => i.Key, StringComparer.OrdinalIgnoreCase);
         for (var i = target.Count - 1; i >= 0; i--)
@@ -360,6 +370,135 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             {
                 target.Add(item);
             }
+        }
+
+        if (order is { Count: > 0 })
+        {
+            ApplyOrder(target, order);
+        }
+    }
+
+    /// <summary>依已存的自訂順序（螢幕 Key 清單）穩定重排；清單裡沒有的（新接上的螢幕）保留原本相對順序、排在最後。</summary>
+    private static void ApplyOrder(ObservableCollection<OutputItem> target, IReadOnlyList<string> order)
+    {
+        var rank = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < order.Count; i++)
+        {
+            rank.TryAdd(order[i], i);
+        }
+
+        var sorted = target
+            .Select((item, index) => (item, index))
+            .OrderBy(t => rank.TryGetValue(t.item.Key, out var r) ? r : int.MaxValue)
+            .ThenBy(t => t.index)
+            .Select(t => t.item)
+            .ToList();
+
+        for (var i = 0; i < sorted.Count; i++)
+        {
+            var from = target.IndexOf(sorted[i]);
+            if (from != i)
+            {
+                target.Move(from, i);
+            }
+        }
+    }
+
+    private void ScreenCard_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not DependencyObject card || IsInteractiveElement(e.OriginalSource as DependencyObject, card))
+        {
+            _dragCandidate = null;
+            return;
+        }
+
+        _dragCandidate = FindDataContext<OutputItem>(card);
+        _dragStartPoint = e.GetPosition(null);
+    }
+
+    private void ScreenCard_OnPreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_dragCandidate is null || e.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        var current = e.GetPosition(null);
+        if (Math.Abs(current.X - _dragStartPoint.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(current.Y - _dragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        var dragged = _dragCandidate;
+        try
+        {
+            // 拖曳期間讓 _dragCandidate 保持非 null，讓背景刷新（DoDragDrop 內部會跑訊息迴圈）暫停套用自訂順序，
+            // 避免每秒的重排跟使用者正在拖的手勢互相打架。
+            DragDrop.DoDragDrop((DependencyObject)sender, new DataObject(ScreenDragFormat, dragged), DragDropEffects.Move);
+        }
+        finally
+        {
+            _dragCandidate = null;
+        }
+    }
+
+    /// <summary>從 e.OriginalSource 往上走到卡片邊界為止：途中碰到按鈕／下拉選單等可互動控制項就不當成拖曳手勢，讓點擊照常生效。</summary>
+    private static bool IsInteractiveElement(DependencyObject? source, DependencyObject boundary)
+    {
+        while (source is not null && !ReferenceEquals(source, boundary))
+        {
+            if (source is ButtonBase or ComboBox or TextBoxBase or ScrollBar or Thumb)
+            {
+                return true;
+            }
+
+            source = source is Visual ? VisualTreeHelper.GetParent(source) : LogicalTreeHelper.GetParent(source);
+        }
+
+        return false;
+    }
+
+    /// <summary>拖曳懸停就即時搬動卡片順序（所見即所得的預覽），不用等放開才變動；Drop 只負責把最終順序存檔。</summary>
+    private void ScreenCard_OnDragOver(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(ScreenDragFormat) ||
+            e.Data.GetData(ScreenDragFormat) is not OutputItem dragged ||
+            sender is not FrameworkElement { DataContext: OutputItem target })
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+
+        e.Effects = DragDropEffects.Move;
+        e.Handled = true;
+
+        if (ReferenceEquals(dragged, target))
+        {
+            return;
+        }
+
+        var from = DesktopScreens.IndexOf(dragged);
+        var to = DesktopScreens.IndexOf(target);
+        if (from >= 0 && to >= 0 && from != to)
+        {
+            DesktopScreens.Move(from, to);
+        }
+    }
+
+    private void ScreenCard_OnDrop(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(ScreenDragFormat))
+        {
+            return;
+        }
+
+        e.Handled = true;
+        _settings.ScreenOrder = DesktopScreens.Select(s => s.Key).ToList();
+        if (!AppSettingsStore.TrySave(_settings, out var error))
+        {
+            Log("螢幕排序記不住（這次仍照排的順序顯示，重開會消失）：" + error);
         }
     }
 

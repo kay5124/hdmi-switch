@@ -8,6 +8,7 @@
         Height="660" Width="760"
         MinHeight="480" MinWidth="640"
         WindowStartupLocation="CenterOwner"
+        Icon="Assets/icon.ico"
         Background="{StaticResource BgBrush}">
     <Grid Margin="16">
         <Grid.RowDefinitions>
@@ -82,8 +83,13 @@
                                                       Style="{StaticResource DarkComboBox}"
                                                       ItemsSource="{Binding DataContext.PowerTargets, RelativeSource={RelativeSource AncestorType=Window}}"
                                                       SelectedItem="{Binding Target, Mode=TwoWay}"
-                                                      DisplayMemberPath="Display"
-                                                      VerticalAlignment="Center"/>
+                                                      VerticalAlignment="Center">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding Display}"/>
+                                                    </DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
                                             <TextBox Grid.Column="2" Width="72" Margin="8,0,0,0"
                                                      TextAlignment="Center"
                                                      Text="{Binding TimeText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"

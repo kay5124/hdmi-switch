@@ -15,6 +15,9 @@ public sealed class AppSettings
     public List<DailyPowerSchedule> DailySchedules { get; set; } = [];
 
     public List<InputLabelOverride> InputLabelOverrides { get; set; } = [];
+
+    /// <summary>螢幕卡片的自訂顯示順序（存 OutputItem.Key）。使用者拖曳排序後寫入，新接上、清單裡沒有的螢幕排在最後。</summary>
+    public List<string> ScreenOrder { get; set; } = [];
 }
 
 public sealed class HotkeyBinding
