@@ -87,7 +87,7 @@ internal static class CcdService
         OutputTechnology.DisplayPortEmbedded => "內建 DisplayPort",
         OutputTechnology.Internal => "內建",
         OutputTechnology.Miracast => "Miracast",
-        OutputTechnology.DisplayPortUsbTunnel => "USB DisplayPort",
+        OutputTechnology.DisplayPortUsbTunnel => "Type-C",
         _ => $"其他 ({technology})"
     };
 

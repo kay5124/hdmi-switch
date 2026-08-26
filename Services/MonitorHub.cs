@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using HdmiSwitch.Native;
 
 namespace HdmiSwitch.Services;
 
@@ -31,6 +32,8 @@ public sealed class OutputItem : INotifyPropertyChanged
 {
     private bool _isAppHere;
     private bool _isMouseHere;
+    private IReadOnlyList<DisplayMode> _resolutions = [];
+    private DisplayMode? _selectedResolution;
 
     public required string Key { get; init; }
     public required string Title { get; set; }
@@ -72,7 +75,32 @@ public sealed class OutputItem : INotifyPropertyChanged
         set => Set(ref _isMouseHere, value);
     }
 
+    /// <summary>這台螢幕支援的解析度（已用 寬×高 去重）。</summary>
+    public IReadOnlyList<DisplayMode> Resolutions => _resolutions;
+
+    /// <summary>目前的解析度，對應 Resolutions 裡的其中一筆。</summary>
+    public DisplayMode? SelectedResolution
+    {
+        get => _selectedResolution;
+        set => Set(ref _selectedResolution, value);
+    }
+
+    public bool HasResolutions => _resolutions.Count > 1;
+
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>解析度清單由 MainWindow 在合併快照後注入，MonitorHub.Capture 維持純查詢。</summary>
+    public void SetResolutions(IReadOnlyList<DisplayMode> modes, DisplayMode? current)
+    {
+        if (!_resolutions.SequenceEqual(modes))
+        {
+            _resolutions = modes;
+            OnPropertyChanged(nameof(Resolutions));
+            OnPropertyChanged(nameof(HasResolutions));
+        }
+
+        SelectedResolution = current;
+    }
 
     public void ApplyFrom(OutputItem source)
     {
@@ -219,6 +247,20 @@ internal static class MonitorHub
 
     public static SwitchResult SwitchInput(string? gdiDeviceName, InputRequest request) =>
         DdcService.SwitchInput(gdiDeviceName, request);
+
+    /// <summary>單台關閉：走 DDC。不支援 DDC 的螢幕會回傳失敗訊息。</summary>
+    public static SwitchResult PowerOff(string? gdiDeviceName) => DdcService.PowerOff(gdiDeviceName);
+
+    /// <summary>
+    /// 全部關閉：走 Windows 系統指令，不靠 DDC，對所有螢幕都有效但沒辦法只關一台。
+    /// 注意這也會關掉 app 視窗所在的螢幕——這是預期行為，移動滑鼠或按鍵盤即可喚醒。
+    /// </summary>
+    public static void PowerOffAllWindows() =>
+        NativeMethods.PostMessage(
+            NativeMethods.HwndBroadcast,
+            NativeMethods.WmSysCommand,
+            new IntPtr(NativeMethods.ScMonitorPower),
+            new IntPtr(NativeMethods.MonitorPowerOff));
 
     public static void EnableWindowsHdmi()
     {

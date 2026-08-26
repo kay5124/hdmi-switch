@@ -15,6 +15,7 @@
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="88"/>
         </Grid.RowDefinitions>
 
@@ -57,7 +58,7 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Margin="8" MinHeight="168" MinWidth="180"
+                            <Border Margin="8" MinHeight="188" MinWidth="220"
                                     Background="{StaticResource CardBrush}"
                                     BorderThickness="2"
                                     CornerRadius="6"
@@ -141,12 +142,33 @@
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
 
-                                    <Button Grid.Row="2" Grid.Column="1"
-                                            Style="{StaticResource GhostButton}" Content="識別"
-                                            HorizontalAlignment="Right"
-                                            VerticalAlignment="Bottom"
-                                            AutomationProperties.Name="識別這台螢幕"
-                                            Click="IdentifyOne_OnClick"/>
+                                    <Grid Grid.Row="2" Grid.Column="1" VerticalAlignment="Bottom">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <ComboBox Style="{StaticResource DarkComboBox}"
+                                                  ItemsSource="{Binding Resolutions}"
+                                                  SelectedItem="{Binding SelectedResolution, Mode=TwoWay}"
+                                                  DisplayMemberPath="Label"
+                                                  HorizontalAlignment="Stretch"
+                                                  Margin="0,0,0,8"
+                                                  ToolTip="切換這台螢幕的解析度"
+                                                  AutomationProperties.Name="解析度"
+                                                  Visibility="{Binding HasResolutions, Converter={StaticResource TrueToVisible}}"
+                                                  SelectionChanged="Resolution_OnSelectionChanged"/>
+                                        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                            <Button Style="{StaticResource GhostButton}" Content="關閉"
+                                                    Margin="0,0,6,0"
+                                                    IsEnabled="{Binding CanSwitch}"
+                                                    ToolTip="用 DDC 讓這台螢幕進入軟關機"
+                                                    AutomationProperties.Name="關閉這台螢幕"
+                                                    Click="PowerOffOne_OnClick"/>
+                                            <Button Style="{StaticResource GhostButton}" Content="識別"
+                                                    AutomationProperties.Name="識別這台螢幕"
+                                                    Click="IdentifyOne_OnClick"/>
+                                        </StackPanel>
+                                    </Grid>
                                 </Grid>
                             </Border>
                         </DataTemplate>
@@ -210,7 +232,44 @@
             </DockPanel>
         </Grid>
 
-        <Border Grid.Row="4" Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="10,8"
+        <Grid Grid.Row="4" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button Style="{StaticResource GhostButton}" Content="全部關閉" Padding="14,10"
+                    ToolTip="送出 Windows 系統指令關掉所有螢幕，含這個視窗所在的那台"
+                    AutomationProperties.Name="關閉全部螢幕"
+                    Click="PowerOffAll_OnClick"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
+                <TextBlock Text="倒數關閉" VerticalAlignment="Center"
+                           Foreground="{StaticResource MutedBrush}" FontSize="12" Margin="0,0,8,0"/>
+                <ComboBox x:Name="CountdownTarget" Style="{StaticResource DarkComboBox}"
+                          Width="150" VerticalAlignment="Center"
+                          ItemsSource="{Binding PowerTargets}"
+                          DisplayMemberPath="Display"
+                          AutomationProperties.Name="倒數關閉的目標"/>
+                <TextBox x:Name="CountdownMinutes" Width="56" Margin="8,0,0,0"
+                         Text="30" TextAlignment="Center" VerticalAlignment="Center"
+                         AutomationProperties.Name="倒數分鐘數"/>
+                <TextBlock Text="分鐘" VerticalAlignment="Center"
+                           Foreground="{StaticResource MutedBrush}" FontSize="12" Margin="6,0,8,0"/>
+                <Button Style="{StaticResource GhostButton}" Content="開始"
+                        Margin="0,0,6,0" Click="StartCountdown_OnClick"/>
+                <Button Style="{StaticResource GhostButton}" Content="取消倒數"
+                        Margin="0,0,10,0" Click="CancelCountdown_OnClick"
+                        Visibility="{Binding HasCountdown, Converter={StaticResource TrueToVisible}}"/>
+                <TextBlock Text="{Binding CountdownText}" VerticalAlignment="Center"
+                           Foreground="{StaticResource HereBrush}" FontSize="12"/>
+            </StackPanel>
+            <Button Grid.Column="2" Style="{StaticResource GhostButton}" Content="設定" Padding="14,10"
+                    ToolTip="快捷鍵、每天定時關閉、輸入名稱"
+                    AutomationProperties.Name="開啟設定"
+                    Click="OpenSettings_OnClick"/>
+        </Grid>
+
+        <Border Grid.Row="5" Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="10,8"
                 BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Top" Text="活動" FontSize="11" FontWeight="SemiBold"

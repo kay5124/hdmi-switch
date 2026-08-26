@@ -59,6 +59,55 @@ internal static class DdcService
         return new SwitchResult(anySuccess, string.Join(Environment.NewLine, notes));
     }
 
+    /// <summary>
+    /// 用 DDC VCP 0xD6（Power Mode）送 0x04 軟關機。
+    /// 選軟關機而非硬關機（0x05）：軟關機通常靠訊號恢復或螢幕電源鍵就能喚醒。
+    /// </summary>
+    public static SwitchResult PowerOff(string? gdiDeviceName)
+    {
+        var targets = QueryPhysicalTargets()
+            .Where(t => gdiDeviceName is null ||
+                        string.Equals(t.GdiDeviceName, gdiDeviceName, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (targets.Length == 0)
+        {
+            return SwitchResult.Fail(gdiDeviceName ?? "全部螢幕", "找不到可控制的實體螢幕。");
+        }
+
+        var notes = new List<string>();
+        var anySuccess = false;
+        foreach (var target in targets)
+        {
+            var result = PowerOffPhysicalMonitor(target);
+            notes.Add(result.Message);
+            anySuccess |= result.Success;
+        }
+
+        return new SwitchResult(anySuccess, string.Join(Environment.NewLine, notes));
+    }
+
+    private static SwitchResult PowerOffPhysicalMonitor(PhysicalTarget target)
+    {
+        var physical = OpenPhysical(target.HMonitor);
+        if (physical is null)
+        {
+            return SwitchResult.Fail(target.Description, "無法開啟 DDC/CI。");
+        }
+
+        try
+        {
+            var handle = physical.Value.Monitors[0].hPhysicalMonitor;
+            return NativeMethods.SetVCPFeature(handle, NativeMethods.VcpPowerMode, NativeMethods.PowerModeSoftOff)
+                ? SwitchResult.Ok(target.Description, "已送出關閉指令（DDC 軟關機）。")
+                : SwitchResult.Fail(target.Description, "這台螢幕不接受 DDC 電源指令（VCP 0xD6）。");
+        }
+        finally
+        {
+            physical.Value.Dispose();
+        }
+    }
+
     private static DdcState QueryMonitor(IntPtr hMonitor)
     {
         var info = GetGdiName(hMonitor);

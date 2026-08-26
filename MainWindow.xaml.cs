@@ -1,6 +1,7 @@
 ﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -15,7 +16,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly DispatcherTimer _hereTimer;
     private readonly List<IdentifyWindow> _identifyWindows = [];
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private readonly AppSettings _settings;
+    private readonly string? _settingsWarning;
     private HwndSource? _hwndSource;
+    private HotkeyManager? _hotkeys;
+    private PowerScheduler? _scheduler;
     private int _hereBusy;
     private bool _isSwitching;
     private bool _closed;
@@ -25,6 +30,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         InitializeComponent();
         DataContext = this;
+        _settings = AppSettingsStore.Load(out _settingsWarning);
         _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _refreshTimer.Tick += (_, _) => _ = RefreshOutputsAsync();
         _hereTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
@@ -42,6 +48,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public ObservableCollection<InputOption> BatchInputOptions { get; } = [];
 
+    public ObservableCollection<MonitorOption> PowerTargets { get; } = [];
+
     public string SummaryText { get; private set; } = "讀取顯示輸出中…";
 
     public string RefreshText { get; private set; } = string.Empty;
@@ -50,6 +58,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public bool CanBatchSwitch =>
         !_isSwitching && DesktopScreens.Any(o => o.CanSwitch);
+
+    public bool HasCountdown => _scheduler?.HasCountdown == true;
+
+    public string CountdownText => _scheduler?.CountdownText ?? string.Empty;
 
     public bool IsReady
     {
@@ -83,7 +95,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 IsReady = true;
                 _refreshTimer.Start();
                 _hereTimer.Start();
+                _scheduler = new PowerScheduler(() => _settings.DailySchedules, OnScheduledPower);
+                _scheduler.StateChanged += (_, _) => Raise(nameof(HasCountdown), nameof(CountdownText));
+                _scheduler.Start();
                 Log("開始監控。點輸入名稱可切到 HDMI／DP／VGA／DVI；琥珀框是這個視窗所在的螢幕。");
+                if (_settingsWarning is not null)
+                {
+                    Log(_settingsWarning);
+                }
+
+                ApplyHotkeys(_settings.Hotkeys);
             }
         }
     }
@@ -93,6 +114,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _closed = true;
         _refreshTimer.Stop();
         _hereTimer.Stop();
+        _scheduler?.Dispose();
+        _scheduler = null;
+        _hotkeys?.Dispose();
+        _hotkeys = null;
         CloseIdentifyWindows();
         if (_hwndSource is not null)
         {
@@ -106,6 +131,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _closed = true;
         _refreshTimer.Stop();
         _hereTimer.Stop();
+        _scheduler?.Dispose();
+        _scheduler = null;
+        _hotkeys?.Dispose();
+        _hotkeys = null;
         CloseIdentifyWindows();
     }
 
@@ -114,6 +143,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         base.OnSourceInitialized(e);
         _hwndSource = PresentationSource.FromVisual(this) as HwndSource;
         _hwndSource?.AddHook(WndProc);
+        _hotkeys = new HotkeyManager(AppHwnd);
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -121,9 +151,41 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (msg == NativeMethods.WmDisplayChange)
         {
             _ = RefreshOutputsAsync();
+            return IntPtr.Zero;
+        }
+
+        if (msg == NativeMethods.WmHotkey &&
+            _hotkeys is not null &&
+            _hotkeys.TryResolve(wParam.ToInt32(), out var family))
+        {
+            handled = true;
+            _ = SwitchAllFamilyAsync(family, InputSelect.FamilyName(family), "快捷鍵：");
         }
 
         return IntPtr.Zero;
+    }
+
+    /// <summary>把 bindings 送去註冊，成功／失敗都寫 Log，並把結果交回給 SettingsWindow 顯示。</summary>
+    private IReadOnlyList<HotkeyRegistration> ApplyHotkeys(IReadOnlyList<HotkeyBinding> bindings)
+    {
+        if (_hotkeys is null)
+        {
+            return bindings
+                .Select(b => new HotkeyRegistration(b, false, "視窗尚未建立，暫時無法註冊快捷鍵。"))
+                .ToArray();
+        }
+
+        var results = _hotkeys.Apply(bindings);
+        foreach (var result in results)
+        {
+            var combo = HotkeyText.Describe(result.Binding.Modifiers, result.Binding.Key);
+            var target = InputSelect.FamilyName(result.Binding.Family);
+            Log(result.Success
+                ? $"快捷鍵 {combo} → 全部切到 {target}。"
+                : $"快捷鍵 {combo}（{target}）註冊失敗：{result.Error}");
+        }
+
+        return results;
     }
 
     private async Task RefreshOutputsAsync()
@@ -176,6 +238,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void ApplySnapshot(MonitorSnapshot snapshot)
     {
+        ApplyInputLabelOverrides(snapshot.Outputs);
+
         Merge(
             DesktopScreens,
             snapshot.Outputs.Where(o => o.HasDesktopBounds).ToArray());
@@ -189,7 +253,89 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         RefreshText = $"更新於 {snapshot.CapturedAt:HH:mm:ss}";
         UpdateCurrentScreenText();
         RebuildBatchOptions();
+        UpdateResolutions();
+        RebuildPowerTargets();
         Raise(nameof(SummaryText), nameof(RefreshText), nameof(CanBatchSwitch));
+    }
+
+    /// <summary>
+    /// 覆寫在合併快照「之前」套用：MonitorHub.Capture 維持純查詢、無狀態，
+    /// 顯示名稱的個人化留在 UI 這層。
+    /// </summary>
+    private void ApplyInputLabelOverrides(IReadOnlyList<OutputItem> outputs)
+    {
+        if (_settings.InputLabelOverrides.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var item in outputs)
+        {
+            if (string.IsNullOrWhiteSpace(item.Title))
+            {
+                continue;
+            }
+
+            var overrides = _settings.InputLabelOverrides
+                .Where(o => !string.IsNullOrWhiteSpace(o.Label) &&
+                            string.Equals(o.MonitorKey, item.Title, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (overrides.Length == 0)
+            {
+                continue;
+            }
+
+            item.Inputs = item.Inputs
+                .Select(chip => chip.Code is byte code &&
+                                overrides.FirstOrDefault(o => o.InputCode == code) is { } hit
+                    ? chip with { Label = hit.Label }
+                    : chip)
+                .ToArray();
+        }
+    }
+
+    private void UpdateResolutions()
+    {
+        foreach (var item in DesktopScreens)
+        {
+            if (string.IsNullOrWhiteSpace(item.SourceGdiName))
+            {
+                item.SetResolutions([], null);
+                continue;
+            }
+
+            var modes = ResolutionService.ListResolutions(item.SourceGdiName);
+            var current = ResolutionService.Current(item.SourceGdiName);
+            var selected = current is null
+                ? null
+                : modes.FirstOrDefault(m => m.Width == current.Width && m.Height == current.Height);
+            item.SetResolutions(modes, selected);
+        }
+    }
+
+    private void RebuildPowerTargets()
+    {
+        var next = new List<MonitorOption> { new(null, "全部螢幕") };
+        next.AddRange(DesktopScreens
+            .Where(s => !string.IsNullOrWhiteSpace(s.SourceGdiName))
+            .Select(s => new MonitorOption(s.SourceGdiName, s.PlaceTitle)));
+
+        if (PowerTargets.SequenceEqual(next))
+        {
+            return;
+        }
+
+        var keep = CountdownTarget?.SelectedItem as MonitorOption;
+        PowerTargets.Clear();
+        foreach (var option in next)
+        {
+            PowerTargets.Add(option);
+        }
+
+        if (CountdownTarget is not null)
+        {
+            CountdownTarget.SelectedItem = keep is not null && next.Contains(keep) ? keep : next[0];
+        }
     }
 
     private static void Merge(ObservableCollection<OutputItem> target, IReadOnlyList<OutputItem> next)
@@ -329,24 +475,35 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        var ready = DesktopScreens.Where(s => s.CanSwitch && s.HasLikelySignal(option.Family)).ToArray();
-        foreach (var skipped in DesktopScreens.Where(s => s.CanSwitch && !s.HasLikelySignal(option.Family)))
+        await SwitchAllFamilyAsync(option.Family, option.Label);
+    }
+
+    /// <summary>按鈕點擊與快捷鍵共用的批次切換：只切偵測到有訊號的螢幕，其餘略過並 Log。</summary>
+    private async Task SwitchAllFamilyAsync(InputFamily family, string label, string prefix = "")
+    {
+        if (_isSwitching || _closed)
         {
-            Log($"{skipped.PlaceTitle} 略過：這台電腦沒有接到 {option.Label}。");
+            return;
+        }
+
+        var ready = DesktopScreens.Where(s => s.CanSwitch && s.HasLikelySignal(family)).ToArray();
+        foreach (var skipped in DesktopScreens.Where(s => s.CanSwitch && !s.HasLikelySignal(family)))
+        {
+            Log($"{skipped.PlaceTitle} 略過：這台電腦沒有接到 {label}。");
         }
 
         if (ready.Length == 0)
         {
-            Log($"沒有螢幕適合切到 {option.Label}（本機看起來沒接這類線）。");
+            Log($"{prefix}沒有螢幕適合切到 {label}（本機看起來沒接這類線）。");
             return;
         }
 
         _isSwitching = true;
         Raise(nameof(CanBatchSwitch));
-        Log($"開始把 {ready.Length} 台螢幕切到 {option.Label}…");
+        Log($"{prefix}開始把 {ready.Length} 台螢幕切到 {label}…");
         try
         {
-            var request = InputRequest.OfFamily(option.Family);
+            var request = InputRequest.OfFamily(family);
             var names = ready.Select(s => s.SourceGdiName).ToArray();
             var result = await Task.Run(() =>
             {
@@ -398,6 +555,166 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void IdentifyAll_OnClick(object sender, RoutedEventArgs e) =>
         ShowIdentify(DesktopScreens.ToArray());
+
+    private async void PowerOffOne_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: OutputItem item })
+        {
+            return;
+        }
+
+        if (!item.CanSwitch)
+        {
+            Log($"{item.PlaceTitle} 沒有 DDC/CI，無法單獨關閉；可以改用「全部關閉」。");
+            return;
+        }
+
+        await PowerOffOneAsync(item.SourceGdiName, item.PlaceTitle, string.Empty);
+    }
+
+    private void PowerOffAll_OnClick(object sender, RoutedEventArgs e) => PowerOffAll(string.Empty);
+
+    private void StartCountdown_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_scheduler is null)
+        {
+            return;
+        }
+
+        var target = CountdownTarget.SelectedItem as MonitorOption ?? PowerTargets.FirstOrDefault();
+        if (target is null)
+        {
+            Log("目前沒有可關閉的目標。");
+            return;
+        }
+
+        if (!int.TryParse((CountdownMinutes.Text ?? string.Empty).Trim(), out var minutes) ||
+            minutes < 1 || minutes > 1440)
+        {
+            Log("倒數分鐘數請輸入 1～1440 的整數。");
+            return;
+        }
+
+        _scheduler.StartCountdown(target.GdiName, target.Display, minutes);
+        Log($"已開始倒數：{minutes} 分鐘後關閉 {target.Display}。（app 關掉倒數就取消）");
+        Raise(nameof(HasCountdown), nameof(CountdownText));
+    }
+
+    private void CancelCountdown_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_scheduler is null || !_scheduler.HasCountdown)
+        {
+            return;
+        }
+
+        _scheduler.CancelCountdown();
+        Log("已取消倒數關閉。");
+        Raise(nameof(HasCountdown), nameof(CountdownText));
+    }
+
+    private void OpenSettings_OnClick(object sender, RoutedEventArgs e)
+    {
+        var window = new SettingsWindow(
+            _settings,
+            DesktopScreens.ToArray(),
+            BatchInputOptions.Select(o => o.Family).ToArray(),
+            ApplyHotkeys)
+        {
+            Owner = this
+        };
+
+        if (window.ShowDialog() != true)
+        {
+            Log("設定未儲存。");
+            return;
+        }
+
+        if (AppSettingsStore.TrySave(_settings, out var error))
+        {
+            Log($"設定已儲存到 {AppSettingsStore.FilePath}。");
+        }
+        else
+        {
+            Log("設定存檔失敗（快捷鍵這次仍生效，但重開會消失）：" + error);
+        }
+
+        _ = RefreshOutputsAsync();
+    }
+
+    private async void Resolution_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not ComboBox { SelectedItem: DisplayMode mode, DataContext: OutputItem item })
+        {
+            return;
+        }
+
+        if (_closed || _isSwitching || string.IsNullOrWhiteSpace(item.SourceGdiName))
+        {
+            return;
+        }
+
+        // 重新整理時會把 SelectedResolution 設回目前值，這裡靠比對現況擋掉自我觸發。
+        var current = ResolutionService.Current(item.SourceGdiName);
+        if (current is not null && current.Width == mode.Width && current.Height == mode.Height)
+        {
+            return;
+        }
+
+        var gdiName = item.SourceGdiName;
+        try
+        {
+            var result = await Task.Run(() => ResolutionService.Apply(gdiName, mode)).ConfigureAwait(true);
+            Log($"{item.PlaceTitle}：{result.Message}");
+        }
+        catch (Exception ex)
+        {
+            Log($"{item.PlaceTitle} 切換解析度失敗：{ex.Message}");
+        }
+        finally
+        {
+            await RefreshOutputsAsync().ConfigureAwait(true);
+        }
+    }
+
+    private void OnScheduledPower(string? gdiDeviceName, string reason)
+    {
+        if (gdiDeviceName is null)
+        {
+            PowerOffAll(reason + "：");
+            return;
+        }
+
+        var title = DesktopScreens
+            .FirstOrDefault(s => string.Equals(s.SourceGdiName, gdiDeviceName, StringComparison.OrdinalIgnoreCase))
+            ?.PlaceTitle ?? gdiDeviceName;
+        _ = PowerOffOneAsync(gdiDeviceName, title, reason + "：");
+    }
+
+    private async Task PowerOffOneAsync(string gdiDeviceName, string title, string prefix)
+    {
+        try
+        {
+            var result = await Task.Run(() => MonitorHub.PowerOff(gdiDeviceName)).ConfigureAwait(true);
+            Log(prefix + result.Message);
+        }
+        catch (Exception ex)
+        {
+            Log($"{prefix}{title} 關閉失敗：{ex.Message}");
+        }
+    }
+
+    private void PowerOffAll(string prefix)
+    {
+        try
+        {
+            MonitorHub.PowerOffAllWindows();
+            Log($"{prefix}已送出全部螢幕關閉指令（含這個視窗所在的螢幕）。移動滑鼠或按鍵盤即可喚醒，不是當機。");
+        }
+        catch (Exception ex)
+        {
+            Log($"{prefix}全部關閉失敗：{ex.Message}");
+        }
+    }
 
     private void ShowIdentify(IReadOnlyList<OutputItem> screens)
     {

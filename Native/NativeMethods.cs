@@ -24,6 +24,31 @@ internal static class NativeMethods
     public const uint SwpShowWindow = 0x0040;
     public const int SwRestore = 9;
 
+    // ---- 全域快捷鍵 ----
+    public const int WmHotkey = 0x0312;
+    public const uint ModAlt = 0x0001;
+    public const uint ModControl = 0x0002;
+    public const uint ModShift = 0x0004;
+    public const uint ModWin = 0x0008;
+    public const uint ModNoRepeat = 0x4000;
+    public const int ErrorHotkeyAlreadyRegistered = 1409;
+
+    // ---- 螢幕電源 ----
+    public const byte VcpPowerMode = 0xD6;
+    public const uint PowerModeSoftOff = 0x04;
+    public const int WmSysCommand = 0x0112;
+    public const int ScMonitorPower = 0xF170;
+    public const int MonitorPowerOff = 2;
+    public static readonly IntPtr HwndBroadcast = new(0xFFFF);
+
+    // ---- 解析度 ----
+    public const int EnumCurrentSettings = -1;
+    public const uint CdsUpdateRegistry = 0x00000001;
+    public const int DispChangeSuccessful = 0;
+    public const uint DmPelsWidth = 0x00080000;
+    public const uint DmPelsHeight = 0x00100000;
+    public const uint DmDisplayFrequency = 0x00400000;
+
     public delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref Rect lprcMonitor, IntPtr dwData);
 
     [DllImport("user32.dll")]
@@ -43,6 +68,21 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool PostMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern bool EnumDisplaySettingsEx(string lpszDeviceName, int iModeNum, ref Devmode lpDevMode, uint dwFlags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int ChangeDisplaySettingsEx(string lpszDeviceName, ref Devmode lpDevMode, IntPtr hwnd, uint dwflags, IntPtr lParam);
 
     [DllImport("user32.dll")]
     public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
@@ -271,6 +311,43 @@ internal struct DisplayConfigTargetDeviceName
     public string monitorFriendlyDeviceName;
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
     public string monitorDevicePath;
+}
+
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+internal struct Devmode
+{
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+    public string dmDeviceName;
+    public ushort dmSpecVersion;
+    public ushort dmDriverVersion;
+    public ushort dmSize;
+    public ushort dmDriverExtra;
+    public uint dmFields;
+    public int dmPositionX;
+    public int dmPositionY;
+    public uint dmDisplayOrientation;
+    public uint dmDisplayFixedOutput;
+    public short dmColor;
+    public short dmDuplex;
+    public short dmYResolution;
+    public short dmTTOption;
+    public short dmCollate;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+    public string dmFormName;
+    public ushort dmLogPixels;
+    public uint dmBitsPerPel;
+    public uint dmPelsWidth;
+    public uint dmPelsHeight;
+    public uint dmDisplayFlags;
+    public uint dmDisplayFrequency;
+    public uint dmICMMethod;
+    public uint dmICMIntent;
+    public uint dmMediaType;
+    public uint dmDitherType;
+    public uint dmReserved1;
+    public uint dmReserved2;
+    public uint dmPanningWidth;
+    public uint dmPanningHeight;
 }
 
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

@@ -1,0 +1,155 @@
+<Window x:Class="HdmiSwitch.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="設定"
+        Height="660" Width="760"
+        MinHeight="480" MinWidth="640"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BgBrush}">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="0,0,8,0">
+
+                <!-- 1. 全域快捷鍵 -->
+                <Border Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="14,12"
+                        BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="全域快捷鍵"/>
+                        <TextBlock Style="{StaticResource SectionHint}"
+                                   Text="按下組合鍵時，會把所有偵測到訊號的螢幕切到該類輸入（跟底部「全部切到」同一套邏輯）。點右邊欄位後直接按組合鍵；按 Esc 清除。必須搭配至少一個 Ctrl／Alt／Shift／Win。"/>
+                        <ItemsControl ItemsSource="{Binding HotkeyRows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="130"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding FamilyLabel}" VerticalAlignment="Center" FontSize="12"/>
+                                            <TextBox Grid.Column="1"
+                                                     IsReadOnly="True"
+                                                     IsReadOnlyCaretVisible="False"
+                                                     Text="{Binding Display, Mode=OneWay}"
+                                                     PreviewKeyDown="HotkeyBox_OnPreviewKeyDown"
+                                                     AutomationProperties.Name="快捷鍵組合"/>
+                                            <Button Grid.Column="2" Style="{StaticResource GhostButton}"
+                                                    Content="清除" Margin="8,0,0,0"
+                                                    Click="ClearHotkey_OnClick"/>
+                                        </Grid>
+                                        <TextBlock Text="{Binding Error}"
+                                                   Foreground="{StaticResource SignalOffBrush}"
+                                                   FontSize="11" Margin="130,3,0,0" TextWrapping="Wrap"
+                                                   Visibility="{Binding HasError, Converter={StaticResource TrueToVisible}}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- 2. 每天固定時間關閉 -->
+                <Border Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="14,12"
+                        BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="每天固定時間關閉"/>
+                        <TextBlock Style="{StaticResource SectionHint}"
+                                   Text="時間用 24 小時制 HH:mm。只有 app 正在執行時才會觸發。選「全部螢幕」會用 Windows 系統指令關掉所有螢幕（含這個視窗所在的那台）。"/>
+                        <ItemsControl ItemsSource="{Binding ScheduleRows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                                      Content="啟用" Margin="0,0,12,0"
+                                                      VerticalAlignment="Center"/>
+                                            <ComboBox Grid.Column="1"
+                                                      Style="{StaticResource DarkComboBox}"
+                                                      ItemsSource="{Binding DataContext.PowerTargets, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                      SelectedItem="{Binding Target, Mode=TwoWay}"
+                                                      DisplayMemberPath="Display"
+                                                      VerticalAlignment="Center"/>
+                                            <TextBox Grid.Column="2" Width="72" Margin="8,0,0,0"
+                                                     TextAlignment="Center"
+                                                     Text="{Binding TimeText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                     AutomationProperties.Name="關閉時間"/>
+                                            <Button Grid.Column="3" Style="{StaticResource GhostButton}"
+                                                    Content="刪除" Margin="8,0,0,0"
+                                                    Click="RemoveSchedule_OnClick"/>
+                                        </Grid>
+                                        <TextBlock Text="{Binding Error}"
+                                                   Foreground="{StaticResource SignalOffBrush}"
+                                                   FontSize="11" Margin="0,3,0,0" TextWrapping="Wrap"
+                                                   Visibility="{Binding HasError, Converter={StaticResource TrueToVisible}}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Style="{StaticResource GhostButton}" Content="新增排程"
+                                HorizontalAlignment="Left" Margin="0,4,0,0"
+                                Click="AddSchedule_OnClick"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- 3. 輸入名稱自訂 -->
+                <Border Background="{StaticResource PanelBrush}" CornerRadius="6" Padding="14,12"
+                        BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="輸入名稱自訂"/>
+                        <TextBlock Style="{StaticResource SectionHint}"
+                                   Text="DDC 的輸入代碼是螢幕韌體自訂的，沒有標準代碼代表「Type-C 孔」，所以要手動改名（例如把 DisplayPort-1 改叫 Type-C）。留空就用預設名稱。已知限制：用螢幕型號名稱當 key，同型號買兩台會共用同一組覆寫。"/>
+                        <ItemsControl ItemsSource="{Binding LabelRows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="120"/>
+                                            <ColumnDefinition Width="180"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding MonitorTitle}" FontSize="12"/>
+                                            <TextBlock Text="{Binding MonitorKey}" FontSize="10"
+                                                       Foreground="{StaticResource MutedBrush}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding DefaultLabel}"
+                                                   FontSize="12" Foreground="{StaticResource MutedBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="2"
+                                                 Text="{Binding Label, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 AutomationProperties.Name="自訂輸入名稱"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Style="{StaticResource SectionHint}" Margin="0,6,0,0"
+                                   Text="（只列出目前偵測得到的螢幕與輸入代碼。）"/>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button Style="{StaticResource GhostButton}" Content="取消" Padding="16,10"
+                    Margin="0,0,8,0" Click="Cancel_OnClick"/>
+            <Button Style="{StaticResource PrimaryButton}" Content="儲存" Click="Save_OnClick"/>
+        </StackPanel>
+    </Grid>
+</Window>
